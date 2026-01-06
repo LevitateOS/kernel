@@ -10,8 +10,8 @@
 
 #![allow(clippy::unwrap_used)]
 
-use levitate_hal::mmu::{ECAM_VA, PCI_MEM32_PA, PCI_MEM32_SIZE};
-use levitate_hal::serial_println;
+use los_hal::mmu::{ECAM_VA, PCI_MEM32_PA, PCI_MEM32_SIZE};
+use los_hal::serial_println;
 use virtio_drivers::transport::pci::bus::{
     BarInfo, Cam, Command, DeviceFunction, MemoryBarType, MmioCam, PciRoot,
 };
