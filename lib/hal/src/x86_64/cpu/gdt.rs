@@ -183,7 +183,9 @@ mod tests {
     }
 
     /// Tests: [X86_GDT4] TSS 64-bit base patching, [X86_TSS2] set_kernel_stack()
+    /// TEAM_431: Ignored - uses privileged instructions (lgdt, ltr) that segfault in userspace
     #[test]
+    #[ignore = "requires kernel mode (privileged instructions)"]
     fn test_gdt_init() {
         unsafe {
             init();
