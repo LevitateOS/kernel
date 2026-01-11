@@ -418,8 +418,66 @@ fn init_userspace() -> bool {
         *global_archive = Some(sb);
     }
 
+    // Register process hooks for syscalls
+    register_process_hooks();
+
     // Spawn init from initramfs
     spawn_init()
+}
+
+/// Register process hooks for syscall layer.
+///
+/// These hooks allow the syscall layer (los_syscall) to access kernel-specific
+/// functionality like initramfs and spawn_from_elf without circular dependencies.
+fn register_process_hooks() {
+    use core::sync::atomic::Ordering;
+    use los_syscall::process::{
+        RESOLVE_EXECUTABLE_HOOK, SPAWN_FROM_ELF_HOOK, SPAWN_FROM_ELF_WITH_ARGS_HOOK,
+    };
+
+    // Resolver: reads ELF data from initramfs by path
+    fn resolve_executable(path: &str) -> Result<alloc::vec::Vec<u8>, u32> {
+        const ENOENT: u32 = 2; // No such file or directory
+
+        let archive_lock = crate::fs::INITRAMFS.lock();
+        let Some(sb) = archive_lock.as_ref() else {
+            return Err(ENOENT);
+        };
+
+        // Strip leading slashes for initramfs lookup
+        let name = path.trim_start_matches('/');
+
+        sb.archive
+            .iter()
+            .find(|e| e.name == name)
+            .map(|e| e.data.to_vec())
+            .ok_or(ENOENT)
+    }
+
+    // Spawn hook: creates a UserTask from ELF data
+    fn spawn_from_elf_hook(
+        elf_data: &[u8],
+        fd_table: crate::task::fd_table::SharedFdTable,
+    ) -> Result<crate::task::user::UserTask, crate::process::SpawnError> {
+        crate::process::spawn_from_elf(elf_data, fd_table)
+    }
+
+    // Spawn with args hook: creates a UserTask with argv/envp
+    fn spawn_from_elf_with_args_hook(
+        elf_data: &[u8],
+        _argv: &[&str],
+        _envp: &[&str],
+        fd_table: crate::task::fd_table::SharedFdTable,
+    ) -> Result<crate::task::user::UserTask, crate::process::SpawnError> {
+        // TODO: Pass argv/envp to spawn_from_elf
+        crate::process::spawn_from_elf(elf_data, fd_table)
+    }
+
+    RESOLVE_EXECUTABLE_HOOK.store(resolve_executable as *mut (), Ordering::Release);
+    SPAWN_FROM_ELF_HOOK.store(spawn_from_elf_hook as *mut (), Ordering::Release);
+    SPAWN_FROM_ELF_WITH_ARGS_HOOK.store(spawn_from_elf_with_args_hook as *mut (), Ordering::Release);
+
+    log::trace!("[BOOT] Process hooks registered");
 }
 
 /// Spawn the init process from initramfs.
