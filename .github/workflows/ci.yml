@@ -1,0 +1,117 @@
+name: Kernel CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  build-x86_64:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout kernel
+        uses: actions/checkout@v4
+        with:
+          path: kernel-under-test
+
+      - name: Checkout LevitateOS (parent repo)
+        uses: actions/checkout@v4
+        with:
+          repository: LevitateOS/LevitateOS
+          submodules: recursive
+          path: LevitateOS
+
+      - name: Replace kernel submodule with commit under test
+        run: |
+          rm -rf LevitateOS/crates/kernel
+          cp -r kernel-under-test LevitateOS/crates/kernel
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mtools xorriso curl cpio fdisk
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src, rust-std
+          targets: x86_64-unknown-none
+
+      - name: Rust Cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: LevitateOS
+          key: x86_64
+
+      - name: Build kernel
+        working-directory: LevitateOS
+        run: cargo xtask build kernel --arch x86_64
+
+      - name: Run unit tests
+        working-directory: LevitateOS
+        run: cargo xtask test unit --arch x86_64
+
+  build-aarch64:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout kernel
+        uses: actions/checkout@v4
+        with:
+          path: kernel-under-test
+
+      - name: Checkout LevitateOS (parent repo)
+        uses: actions/checkout@v4
+        with:
+          repository: LevitateOS/LevitateOS
+          submodules: recursive
+          path: LevitateOS
+
+      - name: Replace kernel submodule with commit under test
+        run: |
+          rm -rf LevitateOS/crates/kernel
+          cp -r kernel-under-test LevitateOS/crates/kernel
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mtools curl cpio fdisk gcc-aarch64-linux-gnu
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src, rust-std
+          targets: aarch64-unknown-none
+
+      - name: Rust Cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: LevitateOS
+          key: aarch64
+
+      - name: Build kernel
+        working-directory: LevitateOS
+        run: cargo xtask build kernel --arch aarch64
+
+      - name: Run unit tests
+        working-directory: LevitateOS
+        run: cargo xtask test unit --arch aarch64
+
+  # Update 'tested' branch on successful master builds
+  update-tested-branch:
+    needs: [build-x86_64, build-aarch64]
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Update tested branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git push origin HEAD:tested --force
