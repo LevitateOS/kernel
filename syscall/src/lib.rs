@@ -265,7 +265,7 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
             frame.arg1() as usize,
             frame.arg2() as u32,
         ),
-        /// TEAM_228: Threading syscalls
+        // TEAM_228: Threading syscalls
         // TEAM_420: flags is u32 to match linux-raw-sys types
         Some(SyscallNumber::Clone) => process::sys_clone(
             frame.arg0() as u32,

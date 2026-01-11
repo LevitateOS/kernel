@@ -6,7 +6,7 @@
 
 use los_mm::user as mm_user;
 use crate::SyscallResult;
-use linux_raw_sys::errno::{EFAULT, EINVAL, ENOSYS};
+use linux_raw_sys::errno::{EFAULT, EINVAL};
 
 // ============================================================================
 // TEAM_350: arch_prctl (x86_64 only) - Set architecture-specific thread state

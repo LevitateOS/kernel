@@ -5,7 +5,6 @@
 //! TEAM_421: Updated all functions to return SyscallResult.
 //! TEAM_422: Arc<dyn Any> downcasting for type-erased FdType handles.
 
-use los_mm::user as mm_user;
 use los_fs_tty::pty::PtyPair;
 // TEAM_413: Import new syscall helpers
 // TEAM_415: Added ioctl helpers

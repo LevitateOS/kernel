@@ -10,7 +10,6 @@
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use core::any::Any;
 use core::sync::atomic::{AtomicU32, Ordering};
 use los_hal::IrqSafeLock;
 

@@ -57,7 +57,7 @@ pub fn sys_shutdown(flags: u32) -> SyscallResult {
 #[cfg(target_arch = "x86_64")]
 los_arch_x86_64::power::system_off();
 #[cfg(target_arch = "aarch64")]
-los_arch_aarch64::power::system_off();;
+los_arch_aarch64::power::system_off();
 }
 
 // ============================================================================

@@ -10,8 +10,8 @@ use los_mm::vma::VmaFlags;
 use crate::SyscallResult;
 use linux_raw_sys::errno::{EINVAL, ENOSYS, ENOMEM};
 use linux_raw_sys::general::{
-    PROT_NONE, PROT_READ, PROT_WRITE, PROT_EXEC,
-    MAP_SHARED, MAP_PRIVATE, MAP_FIXED, MAP_ANONYMOUS,
+    PROT_READ, PROT_WRITE, PROT_EXEC,
+    MAP_FIXED, MAP_ANONYMOUS,
 };
 use los_hal::mmu::{self, PAGE_SIZE, PageAllocator, PageFlags, PageTable, phys_to_virt, tlb_flush_page};
 

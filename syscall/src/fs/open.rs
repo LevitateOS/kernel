@@ -93,6 +93,8 @@ pub fn sys_close(fd: usize) -> SyscallResult {
 // ============================================================================
 
 /// TEAM_419: Access mode flags from linux-raw-sys
+/// TEAM_423: Allow unused - these are public API for future use
+#[allow(unused)]
 pub mod access_mode {
     pub use linux_raw_sys::general::{F_OK, X_OK, W_OK, R_OK};
 }
