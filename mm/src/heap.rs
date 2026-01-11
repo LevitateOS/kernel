@@ -60,4 +60,11 @@ impl ProcessHeap {
     pub fn size(&self) -> usize {
         self.current.saturating_sub(self.base)
     }
+
+    /// TEAM_436: Reset heap to new base address (for execve).
+    pub fn reset(&mut self, new_base: usize) {
+        self.base = new_base;
+        self.current = new_base;
+        self.max = new_base + USER_HEAP_MAX_SIZE;
+    }
 }

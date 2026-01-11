@@ -441,7 +441,8 @@ fn init_userspace() -> bool {
 fn register_process_hooks() {
     use core::sync::atomic::Ordering;
     use los_syscall::process::{
-        RESOLVE_EXECUTABLE_HOOK, SPAWN_FROM_ELF_HOOK, SPAWN_FROM_ELF_WITH_ARGS_HOOK,
+        PREPARE_EXEC_IMAGE_HOOK, RESOLVE_EXECUTABLE_HOOK, SPAWN_FROM_ELF_HOOK,
+        SPAWN_FROM_ELF_WITH_ARGS_HOOK,
     };
 
     // Resolver: reads ELF data from initramfs by path
@@ -482,9 +483,19 @@ fn register_process_hooks() {
         crate::process::spawn_from_elf(elf_data, fd_table)
     }
 
+    // TEAM_436: Prepare exec image hook for execve
+    fn prepare_exec_image_hook(
+        elf_data: &[u8],
+        argv: &[&str],
+        envp: &[&str],
+    ) -> Result<crate::process::ExecImage, crate::process::SpawnError> {
+        crate::process::prepare_exec_image(elf_data, argv, envp)
+    }
+
     RESOLVE_EXECUTABLE_HOOK.store(resolve_executable as *mut (), Ordering::Release);
     SPAWN_FROM_ELF_HOOK.store(spawn_from_elf_hook as *mut (), Ordering::Release);
     SPAWN_FROM_ELF_WITH_ARGS_HOOK.store(spawn_from_elf_with_args_hook as *mut (), Ordering::Release);
+    PREPARE_EXEC_IMAGE_HOOK.store(prepare_exec_image_hook as *mut (), Ordering::Release);
 
     log::trace!("[BOOT] Process hooks registered");
 }

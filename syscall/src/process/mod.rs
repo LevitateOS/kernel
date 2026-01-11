@@ -9,6 +9,7 @@ mod groups;
 mod identity;
 mod lifecycle;
 mod resources;
+mod sched;
 mod thread;
 
 // Re-export all syscall functions
@@ -18,12 +19,15 @@ pub use identity::{
     sys_getegid, sys_geteuid, sys_getgid, sys_gettid, sys_getuid, sys_umask, sys_uname,
 };
 pub use lifecycle::{
-    sys_exec, sys_exit, sys_exit_group, sys_get_foreground, sys_getpid, sys_getppid,
+    sys_exec, sys_execve, sys_exit, sys_exit_group, sys_get_foreground, sys_getpid, sys_getppid,
     sys_set_foreground, sys_spawn, sys_spawn_args, sys_waitpid, sys_yield,
     // TEAM_429: Hooks for kernel integration
-    RESOLVE_EXECUTABLE_HOOK, SPAWN_FROM_ELF_HOOK, SPAWN_FROM_ELF_WITH_ARGS_HOOK,
+    // TEAM_436: Added PREPARE_EXEC_IMAGE_HOOK for execve
+    PREPARE_EXEC_IMAGE_HOOK, RESOLVE_EXECUTABLE_HOOK, SPAWN_FROM_ELF_HOOK,
+    SPAWN_FROM_ELF_WITH_ARGS_HOOK,
 };
 pub use resources::{sys_getrusage, sys_prlimit64};
+pub use sched::{sys_sched_getaffinity, sys_sched_setaffinity};
 pub use thread::{sys_clone, sys_set_tid_address};
 
 // Re-export types that may be used externally

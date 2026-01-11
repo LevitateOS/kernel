@@ -69,9 +69,13 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
         Some(SyscallNumber::Spawn) => {
             process::sys_spawn(frame.arg0() as usize, frame.arg1() as usize)
         }
-        Some(SyscallNumber::Exec) => {
-            process::sys_exec(frame.arg0() as usize, frame.arg1() as usize)
-        }
+        // TEAM_436: execve now passes frame for PC/SP modification
+        Some(SyscallNumber::Exec) => process::sys_execve(
+            frame.arg0() as usize,
+            frame.arg1() as usize,
+            frame.arg2() as usize,
+            frame,
+        ),
         Some(SyscallNumber::Yield) => process::sys_yield(),
         Some(SyscallNumber::Shutdown) => sys::sys_shutdown(frame.arg0() as u32),
         // TEAM_345: Linux ABI - openat(dirfd, pathname, flags, mode)
@@ -406,6 +410,17 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
         Some(SyscallNumber::Truncate) => {
             fs::sys_truncate(frame.arg0() as usize, frame.arg1() as i64)
         }
+        // TEAM_435: Scheduler affinity syscalls for sysinfo/brush
+        Some(SyscallNumber::SchedGetaffinity) => process::sys_sched_getaffinity(
+            frame.arg0() as i32,
+            frame.arg1() as usize,
+            frame.arg2() as usize,
+        ),
+        Some(SyscallNumber::SchedSetaffinity) => process::sys_sched_setaffinity(
+            frame.arg0() as i32,
+            frame.arg1() as usize,
+            frame.arg2() as usize,
+        ),
         None => {
             log::warn!("[SYSCALL] Unknown syscall number: {}", nr);
             Err(linux_raw_sys::errno::ENOSYS)

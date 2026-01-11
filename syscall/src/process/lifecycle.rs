@@ -42,6 +42,11 @@ pub static SPAWN_FROM_ELF_HOOK: AtomicPtr<()> = AtomicPtr::new(core::ptr::null_m
 /// Function signature: fn(&[u8], &[&str], &[&str], IrqSafeLock<FdTable>) -> Result<los_sched::user::UserTask, los_sched::process::SpawnError>
 pub static SPAWN_FROM_ELF_WITH_ARGS_HOOK: AtomicPtr<()> = AtomicPtr::new(core::ptr::null_mut());
 
+/// TEAM_436: Hook for preparing an exec image (for execve).
+/// Function signature: fn(&[u8], &[&str], &[&str]) -> Result<ExecImage, SpawnError>
+/// Returns the prepared address space without creating a new task.
+pub static PREPARE_EXEC_IMAGE_HOOK: AtomicPtr<()> = AtomicPtr::new(core::ptr::null_mut());
+
 /// TEAM_422: Resolve an executable path from initramfs (via hook).
 fn resolve_initramfs_executable(path: &str) -> Result<alloc::vec::Vec<u8>, u32> {
     let hook_ptr = RESOLVE_EXECUTABLE_HOOK.load(Ordering::Acquire);
@@ -199,6 +204,7 @@ pub fn sys_spawn(path_ptr: usize, path_len: usize) -> SyscallResult {
 
 /// TEAM_120: sys_exec - Replace current process with one from initramfs.
 /// TEAM_422: Uses hook mechanism for initramfs access.
+/// TEAM_436: Now calls sys_execve with empty argv/envp for backwards compatibility.
 pub fn sys_exec(path_ptr: usize, path_len: usize) -> SyscallResult {
     let path_len = path_len.min(256);
     let task = los_sched::current_task();
@@ -209,11 +215,255 @@ pub fn sys_exec(path_ptr: usize, path_len: usize) -> SyscallResult {
 
     log::trace!("[SYSCALL] exec('{}')", path);
 
-    // TEAM_422: Use hook to resolve executable from initramfs
-    let _elf_data = resolve_initramfs_executable(path)?;
+    // TEAM_436: Delegate to execve_internal with minimal args
+    let argv: [&str; 1] = [path];
+    let envp: [&str; 0] = [];
+    execve_internal(path, &argv, &envp, None)
+}
 
-    log::warn!("[SYSCALL] exec is currently a stub");
-    Err(ENOSYS)
+// ============================================================================
+// TEAM_436: execve Implementation
+// ============================================================================
+
+use crate::SyscallFrame;
+
+/// TEAM_436: ExecImage mirrors the kernel's ExecImage struct.
+/// Contains prepared address space for execve.
+#[derive(Debug)]
+pub struct ExecImage {
+    pub ttbr0: usize,
+    pub entry_point: usize,
+    pub stack_pointer: usize,
+    pub initial_brk: usize,
+    pub tls_base: usize,
+}
+
+/// TEAM_436: Maximum number of arguments for execve.
+const MAX_EXECVE_ARGC: usize = 64;
+/// TEAM_436: Maximum number of environment variables.
+const MAX_EXECVE_ENVC: usize = 64;
+/// TEAM_436: Maximum length of a single string.
+const MAX_EXECVE_STRLEN: usize = 4096;
+
+/// TEAM_436: sys_execve - Replace current process image (Linux ABI).
+///
+/// # Arguments
+/// * `path_ptr` - Pointer to null-terminated path string
+/// * `argv_ptr` - Pointer to null-terminated array of string pointers
+/// * `envp_ptr` - Pointer to null-terminated array of string pointers (can be NULL)
+/// * `frame` - Syscall frame to modify for new entry point
+///
+/// On success, this function does not return - execution continues at new entry point.
+/// On failure, returns negative errno.
+pub fn sys_execve(
+    path_ptr: usize,
+    argv_ptr: usize,
+    envp_ptr: usize,
+    frame: &mut SyscallFrame,
+) -> SyscallResult {
+    let task = los_sched::current_task();
+
+    // 1. Read path (null-terminated C string)
+    let path = read_user_cstring(task.ttbr0, path_ptr, MAX_EXECVE_STRLEN)?;
+    log::trace!("[SYSCALL] execve('{}', argv={:#x}, envp={:#x})", path, argv_ptr, envp_ptr);
+
+    // 2. Read argv array
+    let argv_strings = read_user_string_array(task.ttbr0, argv_ptr, MAX_EXECVE_ARGC)?;
+    let argv_refs: alloc::vec::Vec<&str> = argv_strings.iter().map(|s| s.as_str()).collect();
+
+    // 3. Read envp array (can be NULL)
+    let envp_strings = if envp_ptr != 0 {
+        read_user_string_array(task.ttbr0, envp_ptr, MAX_EXECVE_ENVC)?
+    } else {
+        alloc::vec::Vec::new()
+    };
+    let envp_refs: alloc::vec::Vec<&str> = envp_strings.iter().map(|s| s.as_str()).collect();
+
+    // 4. Call internal execve with frame
+    execve_internal(&path, &argv_refs, &envp_refs, Some(frame))
+}
+
+/// TEAM_436: Internal execve implementation.
+fn execve_internal(
+    path: &str,
+    argv: &[&str],
+    envp: &[&str],
+    frame: Option<&mut SyscallFrame>,
+) -> SyscallResult {
+    // 1. Resolve executable from initramfs
+    let elf_data = resolve_initramfs_executable(path)?;
+
+    // 2. Prepare exec image via hook
+    let hook_ptr = PREPARE_EXEC_IMAGE_HOOK.load(Ordering::Acquire);
+    if hook_ptr.is_null() {
+        log::warn!("[SYSCALL] execve: prepare_exec_image hook not set");
+        return Err(ENOSYS);
+    }
+
+    // Define the hook type matching the kernel's function signature
+    type PrepareExecHook = fn(&[u8], &[&str], &[&str]) -> Result<ExecImage, los_sched::process::SpawnError>;
+    let prepare_hook: PrepareExecHook = unsafe { core::mem::transmute(hook_ptr) };
+
+    let exec_image = match prepare_hook(&elf_data, argv, envp) {
+        Ok(img) => img,
+        Err(e) => {
+            log::warn!("[SYSCALL] execve: prepare_exec_image failed: {:?}", e);
+            return Err(linux_raw_sys::errno::ENOEXEC);
+        }
+    };
+
+    // 3. Get current task and apply the new image
+    let task = los_sched::current_task();
+
+    // TODO(TEAM_436): Close O_CLOEXEC file descriptors
+    // task.fd_table.lock().close_cloexec();
+
+    // TODO(TEAM_436): Reset signal handlers to default
+    // task.signal_handlers.lock().reset_to_default();
+
+    // 4. Update task state with new address space
+    // Note: We can't directly modify task fields since they're behind Arc.
+    // Instead, we update the syscall frame to jump to new code.
+
+    // 5. Switch to new address space
+    // SAFETY: We're replacing the current process's address space
+    #[cfg(target_arch = "aarch64")]
+    unsafe {
+        // Switch TTBR0 to new page table
+        core::arch::asm!(
+            "msr ttbr0_el1, {0}",
+            "isb",
+            "tlbi vmalle1",
+            "dsb sy",
+            "isb",
+            in(reg) exec_image.ttbr0
+        );
+    }
+    #[cfg(target_arch = "x86_64")]
+    unsafe {
+        // Switch CR3 to new page table
+        core::arch::asm!("mov cr3, {}", in(reg) exec_image.ttbr0);
+    }
+
+    // 6. Update TLS register
+    #[cfg(target_arch = "aarch64")]
+    unsafe {
+        core::arch::asm!("msr tpidr_el0, {}", in(reg) exec_image.tls_base);
+    }
+    #[cfg(target_arch = "x86_64")]
+    unsafe {
+        // TEAM_436: Set FS_BASE MSR directly for TLS
+        // IA32_FS_BASE MSR = 0xC0000100
+        let addr = exec_image.tls_base as u64;
+        core::arch::asm!(
+            "wrmsr",
+            in("ecx") 0xC000_0100u32,
+            in("eax") (addr as u32),
+            in("edx") ((addr >> 32) as u32),
+            options(nostack, preserves_flags)
+        );
+    }
+
+    // 7. Update heap state
+    task.heap.lock().reset(exec_image.initial_brk);
+
+    // 8. Set syscall frame to jump to new entry point
+    if let Some(f) = frame {
+        f.set_pc(exec_image.entry_point as u64);
+        f.set_sp(exec_image.stack_pointer as u64);
+        // Clear return value register (execve returns to new code, not caller)
+        f.set_return(0);
+
+        // TEAM_436: Zero general purpose registers for security (Linux behavior)
+        #[cfg(target_arch = "aarch64")]
+        {
+            for i in 1..31 {
+                f.regs[i] = 0;
+            }
+        }
+        #[cfg(target_arch = "x86_64")]
+        {
+            f.rdi = 0;
+            f.rsi = 0;
+            f.rdx = 0;
+            f.rcx = exec_image.entry_point as u64; // RCX is used for RIP on sysret
+            f.r8 = 0;
+            f.r9 = 0;
+            f.r10 = 0;
+            f.r11 = 0;
+        }
+    }
+
+    log::info!(
+        "[EXECVE] Success: path='{}' entry=0x{:x} sp=0x{:x}",
+        path,
+        exec_image.entry_point,
+        exec_image.stack_pointer
+    );
+
+    // execve never returns on success - the syscall return will jump to new code
+    Ok(0)
+}
+
+/// TEAM_436: Read a null-terminated C string from user space.
+fn read_user_cstring(ttbr0: usize, ptr: usize, max_len: usize) -> Result<alloc::string::String, u32> {
+    use alloc::string::String;
+
+    if ptr == 0 {
+        return Err(EFAULT);
+    }
+
+    let mut result = String::new();
+    for i in 0..max_len {
+        let byte_ptr = ptr.checked_add(i).ok_or(EFAULT)?;
+        let byte = match mm_user::user_va_to_kernel_ptr(ttbr0, byte_ptr) {
+            Some(kptr) => unsafe { *(kptr as *const u8) },
+            None => return Err(EFAULT),
+        };
+        if byte == 0 {
+            break;
+        }
+        result.push(byte as char);
+    }
+
+    Ok(result)
+}
+
+/// TEAM_436: Read a null-terminated array of string pointers from user space.
+fn read_user_string_array(
+    ttbr0: usize,
+    array_ptr: usize,
+    max_count: usize,
+) -> Result<alloc::vec::Vec<alloc::string::String>, u32> {
+    use alloc::vec::Vec;
+
+    if array_ptr == 0 {
+        return Ok(Vec::new());
+    }
+
+    let mut result = Vec::new();
+    let ptr_size = core::mem::size_of::<usize>();
+
+    for i in 0..max_count {
+        let entry_ptr = array_ptr.checked_add(i * ptr_size).ok_or(EFAULT)?;
+
+        // Read the string pointer
+        let str_ptr: usize = match mm_user::user_va_to_kernel_ptr(ttbr0, entry_ptr) {
+            Some(kptr) => unsafe { *(kptr as *const usize) },
+            None => return Err(EFAULT),
+        };
+
+        // NULL terminates the array
+        if str_ptr == 0 {
+            break;
+        }
+
+        // Read the string
+        let s = read_user_cstring(ttbr0, str_ptr, MAX_EXECVE_STRLEN)?;
+        result.push(s);
+    }
+
+    Ok(result)
 }
 
 // ============================================================================

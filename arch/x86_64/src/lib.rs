@@ -111,6 +111,9 @@ pub enum SyscallNumber {
     Ppoll = 271,
     Tkill = 200,
     PkeyAlloc = 330,
+    // TEAM_435: Scheduler syscalls for sysinfo/brush
+    SchedSetaffinity = 203,
+    SchedGetaffinity = 204,
     PkeyMprotect = 329, // TEAM_409: Fixed from 302
     Sigaltstack = 131,
     // TEAM_394: Epoll syscalls for tokio/brush support
@@ -219,6 +222,9 @@ impl SyscallNumber {
             271 => Some(Self::Ppoll),
             200 => Some(Self::Tkill),
             330 => Some(Self::PkeyAlloc),
+            // TEAM_435: Scheduler syscalls for sysinfo/brush
+            203 => Some(Self::SchedSetaffinity),
+            204 => Some(Self::SchedGetaffinity),
             329 => Some(Self::PkeyMprotect), // TEAM_409: Fixed - was incorrectly 302
             302 => Some(Self::Prlimit64),
             131 => Some(Self::Sigaltstack),

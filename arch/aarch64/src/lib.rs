@@ -95,6 +95,9 @@ pub enum SyscallNumber {
     Setsid = 157,
     // TEAM_394: fcntl for brush (F_SETPIPE_SZ, etc.)
     Fcntl = 25,
+    // TEAM_435: Scheduler syscalls for sysinfo/brush
+    SchedSetaffinity = 122,
+    SchedGetaffinity = 123,
     // TEAM_404: File positioning and fd syscalls
     Lseek = 62,
     Pread64 = 67,
@@ -211,6 +214,9 @@ impl SyscallNumber {
             155 => Some(Self::Getpgid),
             157 => Some(Self::Setsid),
             25 => Some(Self::Fcntl),
+            // TEAM_435: Scheduler syscalls for sysinfo/brush
+            122 => Some(Self::SchedSetaffinity),
+            123 => Some(Self::SchedGetaffinity),
             // TEAM_404: File positioning and fd syscalls
             62 => Some(Self::Lseek),
             67 => Some(Self::Pread64),
@@ -396,5 +402,10 @@ impl SyscallFrame {
 
     pub fn set_sp(&mut self, val: u64) {
         self.sp = val;
+    }
+
+    // TEAM_436: Added for execve - set program counter for new process image
+    pub fn set_pc(&mut self, val: u64) {
+        self.pc = val;
     }
 }
