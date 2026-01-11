@@ -2,8 +2,9 @@
 // TEAM_418: Import time types from SSOT
 // TEAM_420: Direct linux_raw_sys imports, no shims
 // TEAM_421: Return SyscallResult, no scattered casts
-use crate::{SyscallResult, Timespec, Timeval, write_struct_to_user};
-use linux_raw_sys::errno::EINVAL;
+// TEAM_430: Fixed nanosleep to read timespec from user memory
+use crate::{SyscallResult, Timespec, Timeval, read_struct_from_user, write_struct_to_user};
+use linux_raw_sys::errno::{EFAULT, EINVAL};
 
 /// TEAM_198: Get uptime in seconds (for tmpfs timestamps).
 pub fn uptime_seconds() -> u64 {
@@ -44,7 +45,37 @@ fn read_timer_frequency() -> u64 {
 
 /// TEAM_170: sys_nanosleep - Sleep for specified duration.
 /// TEAM_421: Returns SyscallResult
-pub fn sys_nanosleep(seconds: u64, nanoseconds: u64) -> SyscallResult {
+/// TEAM_430: Fixed to read timespec from user memory (Linux ABI)
+///
+/// # Arguments
+/// * `req_ptr` - User pointer to timespec struct specifying sleep duration
+/// * `rem_ptr` - User pointer to store remaining time (if interrupted), can be NULL
+///
+/// # Returns
+/// Ok(0) on success, Err(errno) on failure
+pub fn sys_nanosleep(req_ptr: usize, _rem_ptr: usize) -> SyscallResult {
+    // TEAM_430: Read timespec from user memory
+    if req_ptr == 0 {
+        return Err(EFAULT);
+    }
+
+    let task = los_sched::current_task();
+    let req: Timespec = read_struct_from_user(task.ttbr0, req_ptr)?;
+
+    log::debug!(
+        "[SYSCALL] nanosleep: tv_sec={}, tv_nsec={}",
+        req.tv_sec,
+        req.tv_nsec
+    );
+
+    // Validate timespec
+    if req.tv_nsec < 0 || req.tv_nsec >= 1_000_000_000 {
+        return Err(EINVAL);
+    }
+
+    let seconds = req.tv_sec as u64;
+    let nanoseconds = req.tv_nsec as u64;
+
     // TEAM_186: Normalize nanoseconds if > 1e9
     let extra_secs = nanoseconds / 1_000_000_000;
     let norm_nanos = nanoseconds % 1_000_000_000;
@@ -76,6 +107,8 @@ pub fn sys_nanosleep(seconds: u64, nanoseconds: u64) -> SyscallResult {
     while read_timer_counter() < target {
         los_sched::yield_now();
     }
+
+    // TODO: If interrupted, write remaining time to rem_ptr
 
     Ok(0)
 }
@@ -152,6 +185,108 @@ pub fn sys_gettimeofday(tv: usize, _tz: usize) -> SyscallResult {
 
     // TEAM_413: Use write_struct_to_user helper
     write_struct_to_user(task.ttbr0, tv, &timeval)?;
+    Ok(0)
+}
+
+/// TEAM_430: sys_clock_nanosleep - High-resolution sleep with clock specification.
+/// TEAM_421: Returns SyscallResult
+///
+/// This is the syscall used by rustix/Eyra for std::thread::sleep.
+///
+/// # Arguments
+/// * `clockid` - Clock to use (CLOCK_REALTIME=0, CLOCK_MONOTONIC=1)
+/// * `flags` - 0 = relative time, TIMER_ABSTIME(1) = absolute time
+/// * `req_ptr` - User pointer to timespec struct specifying sleep duration
+/// * `rem_ptr` - User pointer to store remaining time (if interrupted), can be NULL
+///
+/// # Returns
+/// Ok(0) on success, Err(errno) on failure
+pub fn sys_clock_nanosleep(clockid: i32, flags: i32, req_ptr: usize, _rem_ptr: usize) -> SyscallResult {
+    // Validate clockid (we only support CLOCK_REALTIME and CLOCK_MONOTONIC)
+    if clockid != 0 && clockid != 1 {
+        return Err(EINVAL);
+    }
+
+    // TEAM_430: Read timespec from user memory
+    if req_ptr == 0 {
+        return Err(EFAULT);
+    }
+
+    let task = los_sched::current_task();
+    let req: Timespec = read_struct_from_user(task.ttbr0, req_ptr)?;
+
+    log::debug!(
+        "[SYSCALL] clock_nanosleep: clockid={}, flags={}, tv_sec={}, tv_nsec={}",
+        clockid,
+        flags,
+        req.tv_sec,
+        req.tv_nsec
+    );
+
+    // Validate timespec
+    if req.tv_nsec < 0 || req.tv_nsec >= 1_000_000_000 {
+        return Err(EINVAL);
+    }
+
+    let freq = read_timer_frequency();
+
+    // Handle TIMER_ABSTIME flag (flags == 1)
+    if flags == 1 {
+        // Absolute time - sleep until the specified time
+        if freq == 0 {
+            // Can't do absolute timing without a timer
+            return Ok(0);
+        }
+
+        // Convert requested absolute time to ticks
+        let req_secs = req.tv_sec as u64;
+        let req_nanos = req.tv_nsec as u64;
+        let target_ticks = req_secs.saturating_mul(freq)
+            .saturating_add((req_nanos as u128 * freq as u128 / 1_000_000_000) as u64);
+
+        // Sleep until we reach or pass the target time
+        while read_timer_counter() < target_ticks {
+            los_sched::yield_now();
+        }
+
+        return Ok(0);
+    }
+
+    // Relative time (flags == 0) - same logic as nanosleep
+    let seconds = req.tv_sec as u64;
+    let nanoseconds = req.tv_nsec as u64;
+
+    // Normalize nanoseconds if > 1e9 (shouldn't happen due to validation, but be safe)
+    let extra_secs = nanoseconds / 1_000_000_000;
+    let norm_nanos = nanoseconds % 1_000_000_000;
+    let total_secs = seconds.saturating_add(extra_secs);
+
+    if freq == 0 {
+        // Fallback path without timer
+        let millis = total_secs
+            .saturating_mul(1000)
+            .saturating_add(norm_nanos / 1_000_000);
+        for _ in 0..(millis.min(u64::MAX) as usize).min(1_000_000) {
+            los_sched::yield_now();
+        }
+        return Ok(0);
+    }
+
+    let start = read_timer_counter();
+
+    // Calculate ticks with overflow protection
+    let ticks_from_secs = total_secs.saturating_mul(freq);
+    let ticks_from_nanos = (norm_nanos as u128 * freq as u128 / 1_000_000_000) as u64;
+    let ticks_to_wait = ticks_from_secs.saturating_add(ticks_from_nanos);
+
+    let target = start.saturating_add(ticks_to_wait);
+
+    while read_timer_counter() < target {
+        los_sched::yield_now();
+    }
+
+    // TODO: If interrupted, write remaining time to rem_ptr
+
     Ok(0)
 }
 

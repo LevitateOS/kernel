@@ -10,12 +10,14 @@ use los_sched::fd_table::FdType;
 
 /// TEAM_345: sys_openat - Linux ABI compatible.
 /// TEAM_421: Updated to return SyscallResult.
+/// TEAM_430: Apply umask to mode when creating files.
 /// Signature: openat(dirfd, pathname, flags, mode)
 ///
 /// TEAM_168: Original implementation.
 /// TEAM_176: Updated to support opening directories for getdents.
 /// TEAM_194: Updated to support tmpfs at /tmp with O_CREAT and O_TRUNC.
-pub fn sys_openat(dirfd: i32, pathname: usize, flags: u32, _mode: u32) -> SyscallResult {
+pub fn sys_openat(dirfd: i32, pathname: usize, flags: u32, mode: u32) -> SyscallResult {
+    use core::sync::atomic::Ordering;
     let task = los_sched::current_task();
 
     // TEAM_345: Read null-terminated pathname (Linux ABI)
@@ -59,8 +61,11 @@ pub fn sys_openat(dirfd: i32, pathname: usize, flags: u32, _mode: u32) -> Syscal
     }
 
     // TEAM_205: All paths now go through generic vfs_open
+    // TEAM_430: Apply umask when creating files (mode & ~umask)
     let vfs_flags = OpenFlags::new(flags);
-    match vfs_open(path_str, vfs_flags, 0o666) {
+    let umask = task.umask.load(Ordering::Acquire);
+    let effective_mode = mode & !umask;
+    match vfs_open(path_str, vfs_flags, effective_mode) {
         Ok(file) => {
             let mut fd_table = task.fd_table.lock();
             match fd_table.alloc(FdType::VfsFile(file)) {

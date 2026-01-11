@@ -280,6 +280,7 @@ dependencies = [
  "los_arch_aarch64",
  "los_arch_x86_64",
  "los_error",
+ "los_fs_devtmpfs",
  "los_fs_ext4",
  "los_fs_initramfs",
  "los_fs_tmpfs",
@@ -361,6 +362,17 @@ dependencies = [
 [[package]]
 name = "los_error"
 version = "0.1.0"
+
+[[package]]
+name = "los_fs_devtmpfs"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "los_error",
+ "los_hal",
+ "los_utils",
+ "los_vfs",
+]
 
 [[package]]
 name = "los_fs_ext4"

@@ -107,8 +107,9 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
         }
         Some(SyscallNumber::Chdir) => fs::sys_chdir(frame.arg0() as usize),
         Some(SyscallNumber::Fchdir) => fs::sys_fchdir(frame.arg0() as usize),
+        // TEAM_430: nanosleep takes pointers to timespec structs
         Some(SyscallNumber::Nanosleep) => {
-            time::sys_nanosleep(frame.arg0() as u64, frame.arg1() as u64)
+            time::sys_nanosleep(frame.arg0() as usize, frame.arg1() as usize)
         }
         // TEAM_409: Legacy time syscall
         Some(SyscallNumber::Gettimeofday) => {
@@ -292,6 +293,13 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
         Some(SyscallNumber::ClockGetres) => {
             time::sys_clock_getres(frame.arg0() as i32, frame.arg1() as usize)
         }
+        // TEAM_430: clock_nanosleep - used by rustix/Eyra for thread::sleep
+        Some(SyscallNumber::ClockNanosleep) => time::sys_clock_nanosleep(
+            frame.arg0() as i32,
+            frame.arg1() as i32,
+            frame.arg2() as usize,
+            frame.arg3() as usize,
+        ),
         Some(SyscallNumber::Madvise) => mm::sys_madvise(
             frame.arg0() as usize,
             frame.arg1() as usize,

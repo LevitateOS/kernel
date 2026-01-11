@@ -71,6 +71,7 @@ pub enum SyscallNumber {
     Getgid = 176,
     Getegid = 177,
     ClockGetres = 114,
+    ClockNanosleep = 115, // TEAM_430: Required for thread::sleep
     Madvise = 233,
     Getrandom = 278,
     Faccessat = 48,
@@ -188,6 +189,7 @@ impl SyscallNumber {
             176 => Some(Self::Getgid),
             177 => Some(Self::Getegid),
             114 => Some(Self::ClockGetres),
+            115 => Some(Self::ClockNanosleep), // TEAM_430
             233 => Some(Self::Madvise),
             278 => Some(Self::Getrandom),
             48 => Some(Self::Faccessat),

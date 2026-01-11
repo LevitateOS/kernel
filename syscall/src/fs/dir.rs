@@ -135,8 +135,10 @@ pub fn sys_getcwd(buf: usize, size: usize) -> SyscallResult {
 
 /// TEAM_345: sys_mkdirat - Linux ABI compatible.
 /// TEAM_421: Updated to return SyscallResult.
+/// TEAM_430: Apply umask to mode when creating directories.
 /// Signature: mkdirat(dirfd, pathname, mode)
 pub fn sys_mkdirat(dirfd: i32, pathname: usize, mode: u32) -> SyscallResult {
+    use core::sync::atomic::Ordering;
     let task = los_sched::current_task();
 
     // TEAM_418: Use PATH_MAX from SSOT
@@ -149,7 +151,10 @@ pub fn sys_mkdirat(dirfd: i32, pathname: usize, mode: u32) -> SyscallResult {
         return Err(EBADF);
     }
 
-    match vfs_mkdir(path_str, mode) {
+    // TEAM_430: Apply umask to mode (mode & ~umask)
+    let umask = task.umask.load(Ordering::Acquire);
+    let effective_mode = mode & !umask;
+    match vfs_mkdir(path_str, effective_mode) {
         Ok(()) => Ok(0),
         Err(VfsError::AlreadyExists) => Err(EEXIST),
         Err(VfsError::NotFound) => Err(ENOENT),
