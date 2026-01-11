@@ -33,9 +33,14 @@ fn main() {
         println!("cargo:rustc-link-arg=-no-pie");
         println!("cargo:rustc-link-arg=-zmax-page-size=0x1000");
     } else if target_arch == "aarch64" {
-        // AArch64 linker script handling (linker script might be implicitly handled or default used)
+        // AArch64 linker script handling
         println!("cargo:rerun-if-changed=src/arch/aarch64/linker.ld");
 
+        // Set linker script via build.rs with absolute path
+        println!(
+            "cargo:rustc-link-arg=-T{}/src/arch/aarch64/linker.ld",
+            manifest_dir
+        );
         // TEAM_304: -nostartfiles required to avoid generic libc startup files (crt1.o)
         println!("cargo:rustc-link-arg=-nostartfiles");
     }
