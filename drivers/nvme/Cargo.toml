@@ -1,0 +1,15 @@
+[package]
+name = "nvme"
+version = "0.1.0"
+edition = "2024"
+readme = "README.md"
+description = "NVMe Storage Driver for LevitateOS"
+
+[dependencies]
+storage-device = { path = "../../lib/traits/storage-device" }
+los_error = { path = "../../lib/error" }
+log = "0.4"
+zerocopy = { version = "0.7", features = ["derive"] }
+
+[lints]
+workspace = true

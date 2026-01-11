@@ -1,0 +1,14 @@
+[package]
+name = "xhci"
+version = "0.1.0"
+edition = "2024"
+readme = "README.md"
+description = "xHCI USB Controller Driver for LevitateOS"
+
+[dependencies]
+input-device = { path = "../../lib/traits/input-device" }
+los_error = { path = "../../lib/error" }
+log = "0.4"
+
+[lints]
+workspace = true

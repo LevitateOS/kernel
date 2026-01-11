@@ -1,0 +1,13 @@
+[package]
+name = "los_fs_initramfs"
+version = "0.1.0"
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+los_vfs = { path = "../../vfs" }
+los_error = { path = "../../lib/error" }
+los_utils = { path = "../../lib/utils" }
+log = "0.4"

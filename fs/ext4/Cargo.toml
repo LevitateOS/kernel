@@ -1,0 +1,15 @@
+[package]
+name = "los_fs_ext4"
+version = "0.1.0"
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+los_vfs = { path = "../../vfs" }
+los_types = { path = "../../lib/types" }
+los_error = { path = "../../lib/error" }
+log = "0.4"
+ext4-view = { version = "0.9", default-features = false }
+embedded-sdmmc = { version = "0.9", default-features = false }

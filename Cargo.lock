@@ -31,7 +31,7 @@ dependencies = [
  "cfg-if",
  "once_cell",
  "version_check",
- "zerocopy",
+ "zerocopy 0.8.33",
 ]
 
 [[package]]
@@ -81,26 +81,6 @@ dependencies = [
  "radium",
  "tap",
  "wyz",
-]
-
-[[package]]
-name = "bytemuck"
-version = "1.24.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1fbdf580320f38b612e485521afda1ee26d10cc9884efaaa750d383e13e3c5f4"
-dependencies = [
- "bytemuck_derive",
-]
-
-[[package]]
-name = "bytemuck_derive"
-version = "1.10.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f9abbd1bc6865053c427f7198e6af43bfdedc55ab791faed4fbd361d789575ff"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
 ]
 
 [[package]]
@@ -270,6 +250,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "input-device"
+version = "0.1.0"
+dependencies = [
+ "spin",
+]
+
+[[package]]
 name = "intrusive-collections"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -286,23 +273,27 @@ dependencies = [
  "acpi",
  "aml",
  "bitflags",
- "bytemuck",
  "cc",
  "embedded-graphics",
- "embedded-sdmmc",
- "ext4-view",
  "limine",
- "linked_list_allocator",
- "linux-raw-sys",
  "log",
+ "los_arch_aarch64",
+ "los_arch_x86_64",
  "los_error",
+ "los_fs_ext4",
+ "los_fs_initramfs",
+ "los_fs_tmpfs",
+ "los_fs_tty",
  "los_gpu",
  "los_hal",
+ "los_mm",
  "los_pci",
+ "los_sched",
+ "los_syscall",
  "los_term",
  "los_utils",
+ "los_vfs",
  "virtio-drivers",
- "volatile 0.6.1",
  "x86_64",
 ]
 
@@ -346,8 +337,81 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
 
 [[package]]
+name = "los_arch_aarch64"
+version = "0.1.0"
+dependencies = [
+ "aarch64-cpu",
+ "linked_list_allocator",
+ "log",
+ "los_hal",
+ "los_types",
+]
+
+[[package]]
+name = "los_arch_x86_64"
+version = "0.1.0"
+dependencies = [
+ "linked_list_allocator",
+ "log",
+ "los_hal",
+ "los_types",
+ "x86_64",
+]
+
+[[package]]
 name = "los_error"
 version = "0.1.0"
+
+[[package]]
+name = "los_fs_ext4"
+version = "0.1.0"
+dependencies = [
+ "embedded-sdmmc",
+ "ext4-view",
+ "log",
+ "los_error",
+ "los_types",
+ "los_vfs",
+]
+
+[[package]]
+name = "los_fs_initramfs"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "los_error",
+ "los_utils",
+ "los_vfs",
+]
+
+[[package]]
+name = "los_fs_tmpfs"
+version = "0.1.0"
+dependencies = [
+ "bitflags",
+ "hashbrown",
+ "log",
+ "los_error",
+ "los_hal",
+ "los_utils",
+ "los_vfs",
+]
+
+[[package]]
+name = "los_fs_tty"
+version = "0.1.0"
+dependencies = [
+ "bitflags",
+ "log",
+ "los_arch_aarch64",
+ "los_arch_x86_64",
+ "los_error",
+ "los_hal",
+ "los_sched",
+ "los_term",
+ "los_utils",
+ "los_vfs",
+]
 
 [[package]]
 name = "los_gpu"
@@ -392,6 +456,41 @@ dependencies = [
 ]
 
 [[package]]
+name = "los_sched"
+version = "0.1.0"
+dependencies = [
+ "bitflags",
+ "hashbrown",
+ "log",
+ "los_arch_aarch64",
+ "los_arch_x86_64",
+ "los_error",
+ "los_hal",
+ "los_mm",
+ "los_utils",
+ "los_vfs",
+]
+
+[[package]]
+name = "los_syscall"
+version = "0.1.0"
+dependencies = [
+ "bitflags",
+ "linux-raw-sys",
+ "log",
+ "los_arch_aarch64",
+ "los_arch_x86_64",
+ "los_error",
+ "los_fs_tty",
+ "los_hal",
+ "los_mm",
+ "los_sched",
+ "los_types",
+ "los_utils",
+ "los_vfs",
+]
+
+[[package]]
 name = "los_term"
 version = "0.1.0"
 dependencies = [
@@ -400,11 +499,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "los_types"
+version = "0.1.0"
+dependencies = [
+ "bitflags",
+]
+
+[[package]]
 name = "los_utils"
 version = "0.1.0"
 dependencies = [
  "hashbrown",
  "spin",
+]
+
+[[package]]
+name = "los_vfs"
+version = "0.1.0"
+dependencies = [
+ "bitflags",
+ "hashbrown",
+ "linux-raw-sys",
+ "log",
+ "los_error",
+ "los_hal",
+ "los_types",
+ "los_utils",
 ]
 
 [[package]]
@@ -423,12 +543,29 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3c8dda44ff03a2f238717214da50f65d5a53b45cd213a7370424ffdb6fae815"
 
 [[package]]
+name = "network-device"
+version = "0.1.0"
+dependencies = [
+ "spin",
+]
+
+[[package]]
 name = "num-traits"
 version = "0.2.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
 dependencies = [
  "autocfg",
+]
+
+[[package]]
+name = "nvme"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "los_error",
+ "storage-device",
+ "zerocopy 0.7.35",
 ]
 
 [[package]]
@@ -473,7 +610,7 @@ version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a0a69f884a1511aa811aa94e04559414a66b18ca63f50f84ca31e304f38bad0d"
 dependencies = [
- "zerocopy",
+ "zerocopy 0.8.33",
 ]
 
 [[package]]
@@ -487,6 +624,16 @@ name = "shlex"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
+
+[[package]]
+name = "simple-gpu"
+version = "0.1.0"
+dependencies = [
+ "embedded-graphics",
+ "log",
+ "los_error",
+ "los_hal",
+]
 
 [[package]]
 name = "spin"
@@ -508,6 +655,13 @@ name = "stable_deref_trait"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
+
+[[package]]
+name = "storage-device"
+version = "0.1.0"
+dependencies = [
+ "spin",
+]
 
 [[package]]
 name = "syn"
@@ -565,6 +719,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
+name = "virtio-blk"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "spin",
+ "storage-device",
+ "virtio-drivers",
+ "virtio-transport",
+]
+
+[[package]]
 name = "virtio-drivers"
 version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -576,7 +741,49 @@ dependencies = [
  "log",
  "safe-mmio",
  "thiserror",
- "zerocopy",
+ "zerocopy 0.8.33",
+]
+
+[[package]]
+name = "virtio-gpu"
+version = "0.1.0"
+dependencies = [
+ "embedded-graphics",
+ "los_hal",
+ "los_pci",
+ "virtio-drivers",
+]
+
+[[package]]
+name = "virtio-input"
+version = "0.1.0"
+dependencies = [
+ "input-device",
+ "log",
+ "spin",
+ "virtio-drivers",
+ "virtio-transport",
+]
+
+[[package]]
+name = "virtio-net"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "network-device",
+ "spin",
+ "virtio-drivers",
+ "virtio-transport",
+]
+
+[[package]]
+name = "virtio-transport"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "spin",
+ "virtio-drivers",
+ "zerocopy 0.8.33",
 ]
 
 [[package]]
@@ -584,12 +791,6 @@ name = "volatile"
 version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "442887c63f2c839b346c192d047a7c87e73d0689c9157b00b53dcc27dd5ea793"
-
-[[package]]
-name = "volatile"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af8ca9a5d4debca0633e697c88269395493cebf2e10db21ca2dbde37c1356452"
 
 [[package]]
 name = "wyz"
@@ -610,7 +811,26 @@ dependencies = [
  "bitflags",
  "const_fn",
  "rustversion",
- "volatile 0.4.6",
+ "volatile",
+]
+
+[[package]]
+name = "xhci"
+version = "0.1.0"
+dependencies = [
+ "input-device",
+ "log",
+ "los_error",
+]
+
+[[package]]
+name = "zerocopy"
+version = "0.7.35"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1b9b4fd18abc82b8136838da5d50bae7bdea537c574d8dc1a34ed098d6c166f0"
+dependencies = [
+ "byteorder",
+ "zerocopy-derive 0.7.35",
 ]
 
 [[package]]
@@ -619,7 +839,18 @@ version = "0.8.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "668f5168d10b9ee831de31933dc111a459c97ec93225beb307aed970d1372dfd"
 dependencies = [
- "zerocopy-derive",
+ "zerocopy-derive 0.8.33",
+]
+
+[[package]]
+name = "zerocopy-derive"
+version = "0.7.35"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fa4f8080344d4671fb4e831a13ad1e68092748387dfc4f55e356242fae12ce3e"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

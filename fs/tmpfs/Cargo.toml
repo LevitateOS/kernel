@@ -1,0 +1,16 @@
+[package]
+name = "los_fs_tmpfs"
+version = "0.1.0"
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+los_vfs = { path = "../../vfs" }
+los_hal = { path = "../../lib/hal" }
+los_error = { path = "../../lib/error" }
+los_utils = { path = "../../lib/utils" }
+log = "0.4"
+bitflags = { workspace = true }
+hashbrown = { workspace = true }

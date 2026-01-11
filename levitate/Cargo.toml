@@ -1,0 +1,57 @@
+[package]
+name = "levitate-kernel"
+version = "0.1.0"
+edition = "2024"
+
+[lints]
+workspace = true
+
+[features]
+default = []
+verbose = []
+diskless = []
+multitask-demo = []
+verbose-syscalls = ["los_syscall/verbose-syscalls"]
+
+[dependencies]
+# Core libraries
+los_hal = { path = "../lib/hal" }
+los_utils = { path = "../lib/utils" }
+los_error = { path = "../lib/error" }
+los_term = { path = "../lib/term" }
+
+# Kernel subsystems
+los_mm = { path = "../mm" }
+los_sched = { path = "../sched" }
+los_vfs = { path = "../vfs" }
+los_syscall = { path = "../syscall" }
+
+# Filesystems
+los_fs_tmpfs = { path = "../fs/tmpfs" }
+los_fs_tty = { path = "../fs/tty" }
+los_fs_ext4 = { path = "../fs/ext4" }
+los_fs_initramfs = { path = "../fs/initramfs" }
+
+# Drivers
+los_pci = { path = "../drivers/pci" }
+los_gpu = { path = "../drivers/gpu" }
+
+# External
+log = "0.4"
+limine = "0.5"
+bitflags = { workspace = true }
+virtio-drivers = { workspace = true }
+embedded-graphics = { workspace = true }
+
+[target.'cfg(target_arch = "aarch64")'.dependencies]
+los_arch_aarch64 = { path = "../arch/aarch64" }
+aarch64-cpu = { workspace = true }
+
+[target.'cfg(target_arch = "x86_64")'.dependencies]
+los_arch_x86_64 = { path = "../arch/x86_64" }
+x86_64 = { workspace = true }
+acpi = { workspace = true }
+aml = { workspace = true }
+
+[build-dependencies]
+cc = "1.0"

@@ -1,0 +1,20 @@
+[package]
+name = "virtio-gpu"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+description = "VirtIO GPU driver for LevitateOS"
+license = "MIT"
+
+[dependencies]
+los_hal = { path = "../../lib/hal" }
+los_pci = { path = "../pci" }
+# TEAM_141: Use workspace dependencies for version consistency
+virtio-drivers.workspace = true
+embedded-graphics.workspace = true
+
+[features]
+default = []
+
+[lints]
+workspace = true
