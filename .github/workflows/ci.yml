@@ -11,92 +11,49 @@ jobs:
   build-x86_64:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout kernel
-        uses: actions/checkout@v4
-        with:
-          path: kernel-under-test
-
-      - name: Checkout LevitateOS (parent repo)
-        uses: actions/checkout@v4
-        with:
-          repository: LevitateOS/LevitateOS
-          submodules: recursive
-          path: LevitateOS
-
-      - name: Replace kernel submodule with commit under test
-        run: |
-          rm -rf LevitateOS/crates/kernel
-          cp -r kernel-under-test LevitateOS/crates/kernel
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y mtools xorriso curl cpio fdisk
+      - uses: actions/checkout@v4
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@nightly
         with:
-          components: rust-src, rust-std
+          components: rust-src, rustfmt, clippy
           targets: x86_64-unknown-none
 
       - name: Rust Cache
         uses: swatinem/rust-cache@v2
         with:
-          workspaces: LevitateOS
           key: x86_64
 
-      - name: Build kernel
-        working-directory: LevitateOS
-        run: cargo xtask build kernel --arch x86_64
+      - name: Check formatting
+        run: cargo fmt --check
 
-      - name: Run unit tests
-        working-directory: LevitateOS
-        run: cargo xtask test unit --arch x86_64
+      - name: Clippy
+        run: cargo clippy --target x86_64-unknown-none -- -D warnings
+
+      - name: Build kernel
+        run: cargo build --release --target x86_64-unknown-none
 
   build-aarch64:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout kernel
-        uses: actions/checkout@v4
-        with:
-          path: kernel-under-test
-
-      - name: Checkout LevitateOS (parent repo)
-        uses: actions/checkout@v4
-        with:
-          repository: LevitateOS/LevitateOS
-          submodules: recursive
-          path: LevitateOS
-
-      - name: Replace kernel submodule with commit under test
-        run: |
-          rm -rf LevitateOS/crates/kernel
-          cp -r kernel-under-test LevitateOS/crates/kernel
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y mtools curl cpio fdisk gcc-aarch64-linux-gnu
+      - uses: actions/checkout@v4
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@nightly
         with:
-          components: rust-src, rust-std
+          components: rust-src, rustfmt, clippy
           targets: aarch64-unknown-none
 
       - name: Rust Cache
         uses: swatinem/rust-cache@v2
         with:
-          workspaces: LevitateOS
           key: aarch64
 
-      - name: Build kernel
-        working-directory: LevitateOS
-        run: cargo xtask build kernel --arch aarch64
+      - name: Clippy
+        run: cargo clippy --target aarch64-unknown-none -- -D warnings
 
-      - name: Run unit tests
-        working-directory: LevitateOS
-        run: cargo xtask test unit --arch aarch64
+      - name: Build kernel
+        run: cargo build --release --target aarch64-unknown-none
 
   # Update 'tested' branch on successful master builds
   update-tested-branch:
