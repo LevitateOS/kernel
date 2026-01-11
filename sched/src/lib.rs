@@ -4,6 +4,7 @@
 //! TEAM_422: This crate was extracted from the monolithic kernel's task module.
 
 pub mod fd_table; // TEAM_168: File descriptor table (Phase 10)
+pub mod fork; // TEAM_432: Process forking for fork() syscall
 pub mod process;
 pub mod process_table; // TEAM_188: Process table for waitpid
 pub mod scheduler;

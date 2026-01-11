@@ -1,12 +1,16 @@
 //! TEAM_422: User Page Table Management
 //!
 //! Creation and destruction of user address space page tables.
+//! TEAM_432: Added copy_user_address_space for fork() support.
 
 use alloc::vec::Vec;
 
 use crate::FRAME_ALLOCATOR;
-use los_hal::mmu::{self, ENTRIES_PER_TABLE, MmuError, PageTable};
+use crate::vma::{VmaFlags, VmaList};
+use los_hal::mmu::{self, ENTRIES_PER_TABLE, MmuError, PAGE_SIZE, PageFlags, PageTable};
 use los_hal::traits::PageAllocator;
+
+use super::mapping::map_user_page;
 
 /// TEAM_073: Create a new user page table.
 ///
@@ -140,6 +144,130 @@ pub unsafe fn destroy_user_page_table(ttbr0_phys: usize) -> Result<(), MmuError>
     mmu::tlb_flush_all();
 
     Ok(())
+}
+
+/// TEAM_432: Copy a parent's user address space for fork().
+///
+/// Creates a new page table and copies all mapped pages from the parent's
+/// address space. This performs an eager (full) copy - not copy-on-write.
+///
+/// # Arguments
+/// * `parent_ttbr0` - Physical address of parent's page table root
+/// * `vmas` - Parent's VMA list describing mapped regions
+///
+/// # Returns
+/// Physical address of the new child page table, or None if allocation fails.
+///
+/// # Safety
+/// - `parent_ttbr0` must be a valid user L0/PML4 page table
+/// - `vmas` must accurately describe the parent's mapped regions
+pub fn copy_user_address_space(parent_ttbr0: usize, vmas: &VmaList) -> Option<usize> {
+    log::trace!("[FORK] Copying user address space...");
+
+    // 1. Create a new page table for the child
+    let child_ttbr0 = create_user_page_table()?;
+
+    // 2. Get the parent's root page table for translation
+    let parent_root_va = mmu::phys_to_virt(parent_ttbr0);
+    // SAFETY: parent_ttbr0 is a valid page table provided by caller
+    let parent_root = unsafe { &*(parent_root_va as *const PageTable) };
+
+    // 3. For each VMA, copy all mapped pages
+    for vma in vmas.iter() {
+        log::trace!(
+            "[FORK] Copying VMA 0x{:x}-0x{:x} flags={:?}",
+            vma.start,
+            vma.end,
+            vma.flags
+        );
+
+        // Iterate over each page in the VMA
+        let mut va = vma.start;
+        while va < vma.end {
+            // Try to translate the VA to get the parent's physical page
+            if let Some((parent_pa, _flags)) = mmu::translate(parent_root, va) {
+                // Page is mapped in parent - copy it
+
+                // a. Allocate a new physical frame for the child
+                let child_pa = match FRAME_ALLOCATOR.alloc_page() {
+                    Some(pa) => pa,
+                    None => {
+                        log::error!("[FORK] Failed to allocate page at VA 0x{:x}", va);
+                        // Cleanup: destroy the partially-created child page table
+                        // SAFETY: child_ttbr0 was just created and is valid
+                        unsafe {
+                            let _ = destroy_user_page_table(child_ttbr0);
+                        }
+                        return None;
+                    }
+                };
+
+                // b. Copy page contents from parent to child
+                let parent_page_va = mmu::phys_to_virt(parent_pa & !0xFFF);
+                let child_page_va = mmu::phys_to_virt(child_pa);
+                // SAFETY: Both addresses point to valid, allocated pages
+                unsafe {
+                    core::ptr::copy_nonoverlapping(
+                        parent_page_va as *const u8,
+                        child_page_va as *mut u8,
+                        PAGE_SIZE,
+                    );
+                }
+
+                // c. Map the new page in the child's page table with same permissions
+                let flags = vma_flags_to_page_flags(vma.flags);
+                // SAFETY: child_ttbr0 is valid, va is in user space, child_pa is valid
+                if let Err(e) = unsafe { map_user_page(child_ttbr0, va, child_pa, flags) } {
+                    log::error!("[FORK] Failed to map page at VA 0x{:x}: {:?}", va, e);
+                    // Free the page we just allocated
+                    FRAME_ALLOCATOR.free_page(child_pa);
+                    // Cleanup child page table
+                    unsafe {
+                        let _ = destroy_user_page_table(child_ttbr0);
+                    }
+                    return None;
+                }
+            }
+            // If page not mapped in parent, skip (sparse mapping)
+
+            va += PAGE_SIZE;
+        }
+    }
+
+    log::trace!(
+        "[FORK] Address space copy complete, child_ttbr0=0x{:x}",
+        child_ttbr0
+    );
+    Some(child_ttbr0)
+}
+
+/// TEAM_432: Convert VMA flags to page table flags.
+fn vma_flags_to_page_flags(vma_flags: VmaFlags) -> PageFlags {
+    let mut flags = PageFlags::VALID;
+
+    // User pages are always accessible from user mode
+    #[cfg(target_arch = "x86_64")]
+    {
+        flags |= PageFlags::USER_ACCESSIBLE;
+    }
+
+    if vma_flags.contains(VmaFlags::WRITE) {
+        #[cfg(target_arch = "x86_64")]
+        {
+            flags |= PageFlags::WRITABLE;
+        }
+    }
+
+    // For now, use USER_DATA which includes user-accessible and writable
+    // More refined permissions can be added later
+    if vma_flags.contains(VmaFlags::WRITE) {
+        PageFlags::USER_DATA
+    } else if vma_flags.contains(VmaFlags::EXEC) {
+        PageFlags::USER_CODE
+    } else {
+        // Read-only data - use USER_CODE (no write bit)
+        PageFlags::USER_CODE
+    }
 }
 
 #[cfg(test)]

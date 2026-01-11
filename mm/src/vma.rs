@@ -81,7 +81,8 @@ define_kernel_error! {
 /// List of VMAs for a process.
 ///
 /// Maintains a sorted list of non-overlapping VMAs.
-#[derive(Debug, Default)]
+/// TEAM_432: Added Clone for fork() support.
+#[derive(Debug, Default, Clone)]
 pub struct VmaList {
     /// VMAs sorted by start address
     vmas: Vec<Vma>,
