@@ -542,6 +542,10 @@ fn init_filesystem() {
     // TEAM_207: Initialize tmpfs and mount at /tmp dentry
     crate::fs::tmpfs::init();
     mount_tmpfs_at_dentry();
+
+    // TEAM_431: Initialize devtmpfs and mount at /dev dentry
+    los_fs_devtmpfs::init();
+    mount_devtmpfs_at_dentry();
 }
 
 /// TEAM_207: Mount tmpfs at /tmp in the dcache
@@ -579,6 +583,43 @@ fn mount_tmpfs_at_dentry() {
     // Mount tmpfs at this dentry
     tmp_dentry.mount(Arc::clone(tmpfs) as Arc<dyn Superblock>);
     crate::verbose!("[BOOT] Mounted tmpfs at /tmp");
+}
+
+/// TEAM_431: Mount devtmpfs at /dev in the dcache
+fn mount_devtmpfs_at_dentry() {
+    use crate::fs::{Dentry, Superblock};
+    use alloc::string::String;
+
+    // Get devtmpfs superblock
+    let devtmpfs_lock = los_fs_devtmpfs::DEVTMPFS.lock();
+    let Some(devtmpfs) = devtmpfs_lock.as_ref() else {
+        log::warn!("[BOOT] WARNING: devtmpfs not initialized");
+        return;
+    };
+
+    // Get root dentry
+    let root = match crate::fs::dcache().root() {
+        Some(r) => r,
+        None => {
+            log::warn!("[BOOT] WARNING: No root dentry for devtmpfs mount");
+            return;
+        }
+    };
+
+    // Create /dev dentry if it doesn't exist
+    let dev_dentry = root.lookup_child("dev").unwrap_or_else(|| {
+        let d = Arc::new(Dentry::new(
+            String::from("dev"),
+            Some(Arc::downgrade(&root)),
+            None, // No inode yet - mount will provide it
+        ));
+        root.add_child(Arc::clone(&d));
+        d
+    });
+
+    // Mount devtmpfs at this dentry
+    dev_dentry.mount(Arc::clone(devtmpfs) as Arc<dyn Superblock>);
+    crate::verbose!("[BOOT] Mounted devtmpfs at /dev");
 }
 
 /// TEAM_129: GPU regression test verification.

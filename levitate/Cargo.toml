@@ -31,6 +31,7 @@ los_fs_tmpfs = { path = "../fs/tmpfs" }
 los_fs_tty = { path = "../fs/tty" }
 los_fs_ext4 = { path = "../fs/ext4" }
 los_fs_initramfs = { path = "../fs/initramfs" }
+los_fs_devtmpfs = { path = "../fs/devtmpfs" }
 
 # Drivers
 los_pci = { path = "../drivers/pci" }
