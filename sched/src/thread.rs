@@ -22,7 +22,7 @@ use los_arch_x86_64::{Context, SyscallFrame, exception_return};
 
 use crate::fd_table;
 use crate::user::Pid;
-use crate::{TaskControlBlock, TaskId, TaskState, current_task};
+use crate::{SignalAction, TaskControlBlock, TaskId, TaskState, current_task};
 
 /// TEAM_230: Error type for thread creation.
 #[derive(Debug)]
@@ -31,12 +31,16 @@ pub enum ThreadError {
     AllocationFailed,
 }
 
+/// TEAM_443: CLONE_FILES flag - share file descriptor table.
+const CLONE_FILES: u32 = 0x00000400;
+
 /// TEAM_230: Create a new thread sharing the parent's address space.
 ///
 /// This is the core function for sys_clone with CLONE_VM | CLONE_THREAD.
 /// The new thread shares:
 /// - Page tables (ttbr0)
 /// - Virtual address space
+/// - File descriptors (if CLONE_FILES is set)
 ///
 /// The new thread has its own:
 /// - Kernel stack
@@ -48,6 +52,7 @@ pub enum ThreadError {
 /// * `child_stack` - User stack pointer for the child
 /// * `child_tls` - Thread Local Storage pointer (TPIDR_EL0)
 /// * `clear_child_tid` - Address to clear and wake on thread exit
+/// * `clone_flags` - Clone flags from sys_clone (TEAM_443: needed for CLONE_FILES)
 /// * `tf` - Parent's trap frame (for register cloning)
 ///
 /// # Returns
@@ -57,6 +62,7 @@ pub fn create_thread(
     child_stack: usize,
     child_tls: usize,
     clear_child_tid: usize,
+    clone_flags: u32,
     tf: &SyscallFrame,
 ) -> Result<Arc<TaskControlBlock>, ThreadError> {
     // TEAM_230: Allocate kernel stack for new thread (16KB)
@@ -124,15 +130,21 @@ pub fn create_thread(
         user_entry: child_frame.pc as usize, // Use PC from frame
         // TEAM_230: Thread gets its own heap tracking (shared address space though)
         heap: IrqSafeLock::new(ProcessHeap::new(0)),
-        // TEAM_230: For MVP, threads get their own fd table
-        // TODO(TEAM_230): Share fd_table when CLONE_FILES is set
-        fd_table: fd_table::new_shared_fd_table(),
+        // TEAM_443: Share fd_table when CLONE_FILES is set (fixes Tokio/brush crash)
+        // Child gets Arc::clone of parent's fd table, so they share the same fds.
+        // Without CLONE_FILES, create a new fd table (fork semantics).
+        fd_table: if clone_flags & CLONE_FILES != 0 {
+            current_task().fd_table.clone()
+        } else {
+            fd_table::new_shared_fd_table()
+        },
         // TEAM_230: Inherit CWD from parent (threads share filesystem state)
         cwd: IrqSafeLock::new(String::from("/")),
         // TEAM_230: Thread signal state
         pending_signals: AtomicU32::new(0),
         blocked_signals: AtomicU32::new(0),
-        signal_handlers: IrqSafeLock::new([0; 32]),
+        // TEAM_441: Initialize with default SignalAction (all SIG_DFL)
+        signal_handlers: IrqSafeLock::new([SignalAction::default(); 64]),
         signal_trampoline: AtomicUsize::new(0),
         // TEAM_230: Store clear_child_tid for CLONE_CHILD_CLEARTID
         clear_child_tid: AtomicUsize::new(clear_child_tid),

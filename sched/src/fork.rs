@@ -129,7 +129,8 @@ pub fn create_fork(tf: &SyscallFrame) -> Result<Arc<TaskControlBlock>, ForkError
         // TEAM_432: Clone parent's heap state
         heap: IrqSafeLock::new(child_heap),
         // TEAM_432: Clone parent's file descriptor table
-        fd_table: IrqSafeLock::new(child_fds),
+        // TEAM_443: Fork creates a NEW fd table (not shared), wrapped in Arc
+        fd_table: Arc::new(IrqSafeLock::new(child_fds)),
         // TEAM_432: Clone parent's VMA list
         vmas: IrqSafeLock::new(parent_vmas),
         // TEAM_432: Clone parent's working directory

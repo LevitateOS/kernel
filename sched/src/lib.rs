@@ -256,9 +256,13 @@ pub struct TaskControlBlock {
     /// TEAM_216: Pending signals bitmask
     pub pending_signals: AtomicU32,
     /// TEAM_216: Blocked signals bitmask
+    // TODO(TEAM_441): Upgrade blocked_signals from AtomicU32 to AtomicU64
+    // for full 64-signal support. sys_sigprocmask also needs updating.
+    // See: docs/planning/brush-requirements/phase-4.md Step 5
     pub blocked_signals: AtomicU32,
     /// TEAM_216: Signal handlers (userspace addresses)
-    pub signal_handlers: IrqSafeLock<[usize; 32]>,
+    /// TEAM_441: Expanded to SignalAction array with full sigaction fields
+    pub signal_handlers: IrqSafeLock<[SignalAction; 64]>,
     /// TEAM_216: Signal trampoline address (in userspace)
     pub signal_trampoline: AtomicUsize,
     /// TEAM_228: Address to clear and wake on thread exit (for CLONE_CHILD_CLEARTID)
@@ -277,6 +281,27 @@ pub struct TaskControlBlock {
 
 /// TEAM_220: Global tracking of the foreground process for shell control.
 pub static FOREGROUND_PID: IrqSafeLock<usize> = IrqSafeLock::new(0);
+
+/// TEAM_441: Internal representation of a signal action.
+/// Stored in the task's signal_handlers array. Holds all sigaction fields.
+#[derive(Clone, Copy)]
+pub struct SignalAction {
+    pub handler: usize,
+    pub flags: u64,
+    pub restorer: usize,
+    pub mask: u64,
+}
+
+impl Default for SignalAction {
+    fn default() -> Self {
+        Self {
+            handler: 0, // SIG_DFL
+            flags: 0,
+            restorer: 0,
+            mask: 0,
+        }
+    }
+}
 
 impl TaskControlBlock {
     /// Set the state of the task.
@@ -322,7 +347,8 @@ impl Default for TaskControlBlock {
             cwd: IrqSafeLock::new(String::new()),
             pending_signals: AtomicU32::new(0),
             blocked_signals: AtomicU32::new(0),
-            signal_handlers: IrqSafeLock::new([0usize; 32]),
+            // TEAM_441: Initialize with default SignalAction (all SIG_DFL)
+            signal_handlers: IrqSafeLock::new([SignalAction::default(); 64]),
             signal_trampoline: AtomicUsize::new(0),
             clear_child_tid: AtomicUsize::new(0),
             vmas: IrqSafeLock::new(los_mm::vma::VmaList::new()),
@@ -369,7 +395,8 @@ impl From<UserTask> for TaskControlBlock {
             // TEAM_216: Initialize signal state for new process
             pending_signals: AtomicU32::new(0),
             blocked_signals: AtomicU32::new(0),
-            signal_handlers: IrqSafeLock::new([0; 32]),
+            // TEAM_441: Initialize with default SignalAction (all SIG_DFL)
+            signal_handlers: IrqSafeLock::new([SignalAction::default(); 64]),
             signal_trampoline: AtomicUsize::new(0),
             // TEAM_228: No clear-on-exit TID for spawned processes
             clear_child_tid: AtomicUsize::new(0),

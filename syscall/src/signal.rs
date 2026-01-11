@@ -1,6 +1,7 @@
 //! TEAM_216: Signal-related syscalls for LevitateOS.
 //! TEAM_420: Uses linux_raw_sys::errno directly, no shims
 //! TEAM_421: Returns SyscallResult, no scattered casts
+//! TEAM_441: Proper rt_sigaction with arch-specific struct parsing
 
 use crate::SyscallFrame;
 use crate::SyscallResult;
@@ -13,6 +14,60 @@ pub const SIGINT: i32 = 2;
 pub const SIGKILL: i32 = 9;
 pub const SIGCHLD: i32 = 17;
 pub const SIGCONT: i32 = 18;
+
+// TEAM_441: Signal action constants (shared across architectures)
+#[allow(dead_code)]
+pub const SIG_DFL: usize = 0;
+#[allow(dead_code)]
+pub const SIG_IGN: usize = 1;
+
+// TEAM_441: sigaction flags (shared across architectures)
+#[allow(dead_code)]
+pub const SA_SIGINFO: u64 = 0x00000004;
+#[allow(dead_code)]
+pub const SA_RESTART: u64 = 0x10000000;
+#[allow(dead_code)]
+pub const SA_NODEFER: u64 = 0x40000000;
+
+// TEAM_441: SignalAction is defined in los_sched, re-export for convenience
+pub use los_sched::SignalAction;
+
+// TEAM_441: Architecture-specific sigaction struct definitions
+#[cfg(target_arch = "x86_64")]
+mod sigaction_arch {
+    /// Linux sigaction struct layout for x86_64
+    /// Total size: 32 bytes
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub struct KernelSigaction {
+        pub sa_handler: usize,   // offset 0: handler or SIG_IGN/SIG_DFL
+        pub sa_flags: u64,       // offset 8: flags
+        pub sa_restorer: usize,  // offset 16: signal trampoline (x86_64 only)
+        pub sa_mask: u64,        // offset 24: 64-bit signal mask
+    }
+
+    pub const SA_RESTORER: u64 = 0x04000000;
+    pub const SIGACTION_SIZE: usize = 32;
+}
+
+#[cfg(target_arch = "aarch64")]
+mod sigaction_arch {
+    /// Linux sigaction struct layout for aarch64
+    /// Total size: 24 bytes (NO sa_restorer field!)
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub struct KernelSigaction {
+        pub sa_handler: usize,   // offset 0: handler or SIG_IGN/SIG_DFL
+        pub sa_flags: u64,       // offset 8: flags
+        pub sa_mask: u64,        // offset 16: 64-bit signal mask
+    }
+
+    // aarch64 does not use SA_RESTORER - kernel provides signal trampoline
+    pub const SIGACTION_SIZE: usize = 24;
+}
+
+#[allow(unused_imports)]
+use sigaction_arch::*;
 
 /// TEAM_216: Send a signal to a process.
 /// TEAM_421: Returns SyscallResult
@@ -67,22 +122,122 @@ pub fn sys_pause() -> SyscallResult {
 
 /// TEAM_216: Register a signal handler.
 /// TEAM_421: Returns SyscallResult
-pub fn sys_sigaction(sig: i32, handler_addr: usize, restorer_addr: usize) -> SyscallResult {
-    if sig < 0 || sig >= 32 {
+/// TEAM_441: Proper rt_sigaction implementation with struct parsing
+pub fn sys_sigaction(
+    sig: i32,
+    act_ptr: usize,
+    oldact_ptr: usize,
+    sigsetsize: usize,
+) -> SyscallResult {
+    // 1. Validate signal number (1-63, not 0)
+    if sig < 1 || sig >= 64 {
+        log::warn!("[SYSCALL] rt_sigaction: invalid signal {}", sig);
+        return Err(EINVAL);
+    }
+    // SIGKILL (9) and SIGSTOP (19) cannot have custom handlers
+    if sig == 9 || sig == 19 {
+        return Err(EINVAL);
+    }
+
+    // 2. Validate sigsetsize (must be 8 for 64-bit sigset_t)
+    if sigsetsize != 8 {
         return Err(EINVAL);
     }
 
     let task = current_task();
-    let mut handlers = task.signal_handlers.lock();
-    handlers[sig as usize] = handler_addr;
+    let ttbr0 = task.ttbr0;
 
-    // Record the signal trampoline (restorer) if provided
-    if restorer_addr != 0 {
-        task.signal_trampoline
-            .store(restorer_addr, Ordering::Release);
+    // 3. If oldact_ptr is provided, write current action to userspace
+    if oldact_ptr != 0 {
+        let handlers = task.signal_handlers.lock();
+        let old_action = &handlers[sig as usize];
+        write_sigaction_to_user(ttbr0, oldact_ptr, old_action)?;
+    }
+
+    // 4. If act_ptr is provided, read and store new action
+    if act_ptr != 0 {
+        let new_action = read_sigaction_from_user(ttbr0, act_ptr)?;
+        let mut handlers = task.signal_handlers.lock();
+        handlers[sig as usize] = new_action;
+
+        // x86_64 only: If SA_RESTORER is set, store the trampoline globally
+        #[cfg(target_arch = "x86_64")]
+        if new_action.flags & sigaction_arch::SA_RESTORER != 0 {
+            task.signal_trampoline
+                .store(new_action.restorer, Ordering::Release);
+        }
     }
 
     Ok(0)
+}
+
+/// TEAM_441: Read KernelSigaction from userspace and convert to SignalAction
+fn read_sigaction_from_user(ttbr0: usize, ptr: usize) -> Result<SignalAction, u32> {
+    // Read the arch-specific struct size
+    let mut bytes = [0u8; 32]; // Max size (x86_64)
+    let size = sigaction_arch::SIGACTION_SIZE;
+
+    for i in 0..size {
+        match crate::read_from_user(ttbr0, ptr + i) {
+            Some(b) => bytes[i] = b,
+            None => return Err(EFAULT),
+        }
+    }
+
+    // Parse struct fields (little-endian)
+    let handler = u64::from_le_bytes(bytes[0..8].try_into().unwrap()) as usize;
+    let flags = u64::from_le_bytes(bytes[8..16].try_into().unwrap());
+
+    #[cfg(target_arch = "x86_64")]
+    let (restorer, mask) = {
+        let restorer = u64::from_le_bytes(bytes[16..24].try_into().unwrap()) as usize;
+        let mask = u64::from_le_bytes(bytes[24..32].try_into().unwrap());
+        (restorer, mask)
+    };
+
+    #[cfg(target_arch = "aarch64")]
+    let (restorer, mask) = {
+        // aarch64 has no sa_restorer field
+        let mask = u64::from_le_bytes(bytes[16..24].try_into().unwrap());
+        (0usize, mask)
+    };
+
+    Ok(SignalAction {
+        handler,
+        flags,
+        restorer,
+        mask,
+    })
+}
+
+/// TEAM_441: Write SignalAction to userspace as KernelSigaction
+fn write_sigaction_to_user(ttbr0: usize, ptr: usize, action: &SignalAction) -> Result<(), u32> {
+    let mut bytes = [0u8; 32]; // Max size (x86_64)
+
+    // Common fields
+    bytes[0..8].copy_from_slice(&(action.handler as u64).to_le_bytes());
+    bytes[8..16].copy_from_slice(&action.flags.to_le_bytes());
+
+    #[cfg(target_arch = "x86_64")]
+    {
+        bytes[16..24].copy_from_slice(&(action.restorer as u64).to_le_bytes());
+        bytes[24..32].copy_from_slice(&action.mask.to_le_bytes());
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    {
+        // aarch64 has no sa_restorer field - mask is at offset 16
+        bytes[16..24].copy_from_slice(&action.mask.to_le_bytes());
+    }
+
+    let size = sigaction_arch::SIGACTION_SIZE;
+    for i in 0..size {
+        if !crate::write_to_user_buf(ttbr0, ptr, i, bytes[i]) {
+            return Err(EFAULT);
+        }
+    }
+
+    Ok(())
 }
 
 /// TEAM_216: Restore context after signal handler execution.

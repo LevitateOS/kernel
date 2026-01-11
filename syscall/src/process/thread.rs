@@ -91,8 +91,9 @@ fn clone_thread(
     };
 
     // TEAM_230: Create the thread
+    // TEAM_443: Pass flags so create_thread can share fd_table when CLONE_FILES is set
     let child =
-        match los_sched::thread::create_thread(parent_ttbr0, stack, thread_tls, clear_tid, tf) {
+        match los_sched::thread::create_thread(parent_ttbr0, stack, thread_tls, clear_tid, flags, tf) {
             Ok(c) => c,
             Err(e) => {
                 log::warn!("[SYSCALL] clone: create_thread failed: {:?}", e);

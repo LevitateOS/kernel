@@ -63,12 +63,13 @@ fn resolve_initramfs_executable(path: &str) -> Result<alloc::vec::Vec<u8>, u32> 
 }
 
 /// TEAM_414: Clone the current task's FD table for a child process.
-fn clone_fd_table_for_child() -> IrqSafeLock<FdTable> {
+/// TEAM_443: Updated to return SharedFdTable (Arc<IrqSafeLock<FdTable>>) for CLONE_FILES support.
+fn clone_fd_table_for_child() -> los_sched::fd_table::SharedFdTable {
     let task = los_sched::current_task();
     let flags = los_hal::interrupts::disable();
     let parent_fds = task.fd_table.lock().clone();
     los_hal::interrupts::restore(flags);
-    IrqSafeLock::new(parent_fds)
+    alloc::sync::Arc::new(IrqSafeLock::new(parent_fds))
 }
 
 /// TEAM_414: Register a newly spawned process and add it to the scheduler.
@@ -187,9 +188,10 @@ pub fn sys_spawn(path_ptr: usize, path_len: usize) -> SyscallResult {
         return Err(ENOSYS);
     }
 
+    // TEAM_443: Use SharedFdTable (Arc<IrqSafeLock<FdTable>>) to match actual hook signature
     type SpawnHook = fn(
         &[u8],
-        IrqSafeLock<FdTable>,
+        los_sched::fd_table::SharedFdTable,
     ) -> Result<los_sched::user::UserTask, los_sched::process::SpawnError>;
     let hook: SpawnHook = unsafe { core::mem::transmute(hook_ptr) };
 
@@ -565,11 +567,12 @@ pub fn sys_spawn_args(
         return Err(ENOSYS);
     }
 
+    // TEAM_443: Use SharedFdTable (Arc<IrqSafeLock<FdTable>>) to match actual hook signature
     type SpawnArgsHook = fn(
         &[u8],
         &[&str],
         &[&str],
-        IrqSafeLock<FdTable>,
+        los_sched::fd_table::SharedFdTable,
     )
         -> Result<los_sched::user::UserTask, los_sched::process::SpawnError>;
     let hook: SpawnArgsHook = unsafe { core::mem::transmute(hook_ptr) };

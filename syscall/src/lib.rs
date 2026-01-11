@@ -234,10 +234,12 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
             frame.arg2() as u32,
         ),
         Some(SyscallNumber::Pause) => signal::sys_pause(),
+        // TEAM_441: rt_sigaction takes 4 args: sig, act, oldact, sigsetsize
         Some(SyscallNumber::SigAction) => signal::sys_sigaction(
             frame.arg0() as i32,
             frame.arg1() as usize,
             frame.arg2() as usize,
+            frame.arg3() as usize,
         ),
         Some(SyscallNumber::SigReturn) => signal::sys_sigreturn(frame),
         Some(SyscallNumber::SigProcMask) => signal::sys_sigprocmask(
@@ -265,13 +267,27 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
         ),
         // TEAM_228: Threading syscalls
         // TEAM_420: flags is u32 to match linux-raw-sys types
+        // TEAM_442: Architecture-specific clone argument order:
+        //   x86_64:  flags, stack, parent_tid, child_tid, tls
+        //   aarch64: flags, stack, parent_tid, tls, child_tid
+        // Our sys_clone signature matches aarch64 order.
+        #[cfg(target_arch = "x86_64")]
         Some(SyscallNumber::Clone) => process::sys_clone(
             frame.arg0() as u32,
             frame.arg1() as usize,
             frame.arg2() as usize,
-            frame.arg3() as usize,
-            frame.arg4() as usize,
-            frame, // TEAM_230: Pass frame to clone registers
+            frame.arg4() as usize, // tls is arg4 on x86_64
+            frame.arg3() as usize, // child_tid is arg3 on x86_64
+            frame,
+        ),
+        #[cfg(target_arch = "aarch64")]
+        Some(SyscallNumber::Clone) => process::sys_clone(
+            frame.arg0() as u32,
+            frame.arg1() as usize,
+            frame.arg2() as usize,
+            frame.arg3() as usize, // tls is arg3 on aarch64
+            frame.arg4() as usize, // child_tid is arg4 on aarch64
+            frame,
         ),
         Some(SyscallNumber::SetTidAddress) => process::sys_set_tid_address(frame.arg0() as usize),
         // TEAM_233: Pipe and dup syscalls
@@ -435,9 +451,9 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
     };
 
     // TEAM_421: Single conversion point - Linux ABI boundary
-    let abi_result = match result {
-        Ok(v) => v,
-        Err(e) => -(e as i64),
+    let abi_result = match &result {
+        Ok(v) => *v,
+        Err(e) => -(*e as i64),
     };
 
     frame.set_return(abi_result);

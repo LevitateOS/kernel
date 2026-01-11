@@ -226,9 +226,9 @@ pub fn sys_isatty(fd: i32) -> SyscallResult {
 pub fn sys_ioctl(fd: usize, request: u64, arg: usize) -> SyscallResult {
     // TEAM_422: Use ioctl constants from arch crate (u64 to match request type)
     #[cfg(target_arch = "aarch64")]
-    use los_arch_aarch64::{TCGETS, TCSETS, TCSETSF, TCSETSW, TIOCGPTN, TIOCSPTLCK};
+    use los_arch_aarch64::{TCGETS, TCSETS, TCSETSF, TCSETSW, TIOCGPTN, TIOCSPTLCK, TIOCGWINSZ};
     #[cfg(target_arch = "x86_64")]
-    use los_arch_x86_64::{TCGETS, TCSETS, TCSETSF, TCSETSW, TIOCGPTN, TIOCSPTLCK};
+    use los_arch_x86_64::{TCGETS, TCSETS, TCSETSF, TCSETSW, TIOCGPTN, TIOCSPTLCK, TIOCGWINSZ};
     use los_fs_tty::CONSOLE_TTY;
 
     // TEAM_413: Use get_fd helper
@@ -261,6 +261,21 @@ pub fn sys_ioctl(fd: usize, request: u64, arg: usize) -> SyscallResult {
                 Err(e) => Err(e),
             },
             TIOCSCTTY => Ok(0), // Set controlling terminal (stub - just succeed)
+            // TEAM_441: TIOCGWINSZ - get terminal window size
+            TIOCGWINSZ => {
+                // Return a reasonable default terminal size (80x24)
+                // struct winsize { unsigned short ws_row, ws_col, ws_xpixel, ws_ypixel; }
+                let winsize: [u16; 4] = [24, 80, 0, 0]; // rows, cols, xpixel, ypixel
+                let bytes = unsafe {
+                    core::slice::from_raw_parts(winsize.as_ptr() as *const u8, 8)
+                };
+                for i in 0..8 {
+                    if !crate::write_to_user_buf(task.ttbr0, arg, i, bytes[i]) {
+                        return Err(EFAULT);
+                    }
+                }
+                Ok(0)
+            }
             _ => Err(EINVAL),
         },
         FdType::PtyMaster(pair_any) => {

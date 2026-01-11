@@ -242,9 +242,13 @@ impl Default for FdTable {
 }
 
 /// TEAM_168: Thread-safe wrapper for FdTable.
-pub type SharedFdTable = IrqSafeLock<FdTable>;
+/// TEAM_443: Now uses Arc to enable fd table sharing for CLONE_FILES.
+/// When clone() is called with CLONE_FILES, parent and child share the same
+/// Arc, giving them a shared view of file descriptors.
+pub type SharedFdTable = Arc<IrqSafeLock<FdTable>>;
 
 /// TEAM_168: Create a new shared fd table.
+/// TEAM_443: Wraps in Arc for CLONE_FILES sharing support.
 pub fn new_shared_fd_table() -> SharedFdTable {
-    IrqSafeLock::new(FdTable::new())
+    Arc::new(IrqSafeLock::new(FdTable::new()))
 }
