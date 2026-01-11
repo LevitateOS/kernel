@@ -6,6 +6,7 @@ members = [
     "term",
     "pci",
     "gpu",
+    "mm",  # TEAM_422: Memory management crate
 ]
 resolver = "2"
 

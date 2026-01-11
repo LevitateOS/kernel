@@ -1,0 +1,278 @@
+//! TEAM_422: User Page Mapping Functions
+//!
+//! Functions for mapping and validating user address space pages.
+
+use crate::memory::FRAME_ALLOCATOR;
+use los_hal::mmu::{self, MmuError, PAGE_SIZE, PageFlags, PageTable};
+use los_hal::traits::PageAllocator;
+
+use super::layout;
+
+/// TEAM_415: Allocate, zero, and map a single page.
+///
+/// Common pattern used by setup_user_stack, setup_user_tls, and alloc_and_map_heap_page.
+pub fn alloc_zero_map_page(ttbr0_phys: usize, user_va: usize, flags: PageFlags) -> Result<(), MmuError> {
+    // Allocate physical page
+    let phys = FRAME_ALLOCATOR
+        .alloc_page()
+        .ok_or(MmuError::AllocationFailed)?;
+
+    // Zero the page for security
+    let page_ptr = mmu::phys_to_virt(phys) as *mut u8;
+    // SAFETY: phys was just allocated and is valid
+    unsafe { core::ptr::write_bytes(page_ptr, 0, PAGE_SIZE); }
+
+    // Map into user address space
+    // SAFETY: caller ensures ttbr0_phys and user_va are valid
+    unsafe { map_user_page(ttbr0_phys, user_va, phys, flags) }
+}
+
+/// TEAM_073: Map a single user page.
+///
+/// Maps a page in the user's TTBR0 page table.
+///
+/// # Arguments
+/// * `ttbr0_phys` - Physical address of user L0 page table
+/// * `user_va` - Virtual address in user space (must be < 0x8000_0000_0000)
+/// * `phys` - Physical address to map
+/// * `flags` - Page flags (should use USER_CODE or USER_DATA)
+///
+/// # Safety
+/// - `ttbr0_phys` must point to a valid L0 page table
+/// - `user_va` must be in valid user address range
+pub unsafe fn map_user_page(
+    ttbr0_phys: usize,
+    user_va: usize,
+    phys: usize,
+    flags: PageFlags,
+) -> Result<(), MmuError> {
+    // TEAM_152: Updated to use MmuError
+    // Validate user address
+    if user_va >= layout::USER_SPACE_END {
+        return Err(MmuError::InvalidVirtualAddress);
+    }
+
+    // Get the L0 table
+    let l0_va = mmu::phys_to_virt(ttbr0_phys);
+    // SAFETY: ttbr0_phys is provided by the caller and must be a valid L0 page table.
+    let l0 = unsafe { &mut *(l0_va as *mut PageTable) };
+
+    // Use MMU's map_page function
+    mmu::map_page(l0, user_va, phys, flags)
+}
+
+/// TEAM_073: Map a range of user pages.
+///
+/// # Arguments
+/// * `ttbr0_phys` - Physical address of user L0 page table
+/// * `user_va_start` - Starting virtual address (page-aligned)
+/// * `phys_start` - Starting physical address (page-aligned)
+/// * `len` - Length in bytes to map
+/// * `flags` - Page flags
+#[allow(dead_code)]
+pub unsafe fn map_user_range(
+    ttbr0_phys: usize,
+    user_va_start: usize,
+    phys_start: usize,
+    len: usize,
+    flags: PageFlags,
+) -> Result<(), MmuError> {
+    // TEAM_152: Updated to use MmuError
+    // Validate user address
+    if user_va_start >= layout::USER_SPACE_END {
+        return Err(MmuError::InvalidVirtualAddress);
+    }
+    if user_va_start.saturating_add(len) > layout::USER_SPACE_END {
+        return Err(MmuError::InvalidVirtualAddress);
+    }
+
+    let l0_va = mmu::phys_to_virt(ttbr0_phys);
+    // SAFETY: ttbr0_phys is provided by the caller and must be a valid L0 page table.
+    let l0 = unsafe { &mut *(l0_va as *mut PageTable) };
+
+    let mut va = user_va_start & !0xFFF; // Page align
+    let mut pa = phys_start & !0xFFF;
+    let end_va = (user_va_start + len + 0xFFF) & !0xFFF;
+
+    while va < end_va {
+        mmu::map_page(l0, va, pa, flags)?;
+        va += PAGE_SIZE;
+        pa += PAGE_SIZE;
+    }
+
+    Ok(())
+}
+
+/// TEAM_073: Allocate physical pages and map them for user code/data.
+#[allow(dead_code)]
+pub unsafe fn alloc_and_map_user_range(
+    ttbr0_phys: usize,
+    user_va_start: usize,
+    len: usize,
+    flags: PageFlags,
+) -> Result<usize, MmuError> {
+    // TEAM_152: Updated to use MmuError
+    if len == 0 {
+        return Err(MmuError::InvalidVirtualAddress);
+    }
+
+    let va_start = user_va_start & !0xFFF;
+    let pages_needed = (len + (user_va_start - va_start) + PAGE_SIZE - 1) / PAGE_SIZE;
+
+    let mut first_phys = 0;
+
+    for i in 0..pages_needed {
+        let page_va = va_start + i * PAGE_SIZE;
+
+        // Allocate physical page
+        let phys = FRAME_ALLOCATOR
+            .alloc_page()
+            .ok_or(MmuError::AllocationFailed)?;
+
+        if i == 0 {
+            first_phys = phys;
+        }
+
+        // Zero the page
+        let page_ptr = mmu::phys_to_virt(phys) as *mut u8;
+        unsafe {
+            core::ptr::write_bytes(page_ptr, 0, PAGE_SIZE);
+        }
+
+        // Map into user address space
+        // SAFETY: The page was just allocated and the VA is validated.
+        unsafe {
+            map_user_page(ttbr0_phys, page_va, phys, flags)?;
+        }
+    }
+
+    Ok(first_phys)
+}
+
+/// TEAM_166: Allocate and map a single heap page for sbrk.
+/// TEAM_415: Now delegates to alloc_zero_map_page helper.
+pub fn alloc_and_map_heap_page(ttbr0_phys: usize, user_va: usize) -> Result<(), MmuError> {
+    alloc_zero_map_page(ttbr0_phys, user_va, PageFlags::USER_DATA)
+}
+
+/// TEAM_166: Internal helper - map a page at a specific physical address.
+/// Renamed from the original map_user_page to avoid confusion.
+#[allow(dead_code)]
+pub(super) unsafe fn map_user_page_at(
+    ttbr0_phys: usize,
+    user_va: usize,
+    phys: usize,
+    flags: PageFlags,
+) -> Result<(), MmuError> {
+    // Validate user address
+    if user_va >= layout::USER_SPACE_END {
+        return Err(MmuError::InvalidVirtualAddress);
+    }
+
+    // Get the L0 table
+    let l0_va = mmu::phys_to_virt(ttbr0_phys);
+    // SAFETY: ttbr0_phys is an internal physical address of a user page table,
+    // guaranteed to be valid by the process management logic.
+    let l0 = unsafe { &mut *(l0_va as *mut PageTable) };
+
+    // Use MMU's map_page function
+    mmu::map_page(l0, user_va, phys, flags)
+}
+
+/// TEAM_156: Translate a user virtual address to a kernel-accessible pointer.
+///
+/// This walks the user's page table to find the physical address,
+/// then converts it to a kernel VA that can be safely accessed.
+///
+/// # Safety
+/// - `ttbr0_phys` must be a valid user page table
+/// - The user VA must be mapped
+/// - Caller must ensure proper synchronization
+pub fn user_va_to_kernel_ptr(ttbr0_phys: usize, user_va: usize) -> Option<*mut u8> {
+    // Get L0 table
+    let l0_va = mmu::phys_to_virt(ttbr0_phys);
+    // SAFETY: ttbr0_phys is a valid page table physical address managed by the process.
+    let l0 = unsafe { &mut *(l0_va as *mut PageTable) };
+
+    // Walk page tables to find physical address
+    let page_va = user_va & !0xFFF;
+    let page_offset = user_va & 0xFFF;
+
+    if let Ok(walk) = mmu::walk_to_entry(l0, page_va, 3, false) {
+        let entry = walk.table.entry(walk.index);
+        if entry.is_valid() {
+            let entry_phys = entry.address();
+            let dst_phys = entry_phys + page_offset;
+            let kernel_va = mmu::phys_to_virt(dst_phys);
+            return Some(kernel_va as *mut u8);
+        }
+    }
+    None
+}
+
+/// TEAM_137: Validate a user buffer range.
+/// Checks that all pages in the range are mapped and have correct permissions for EL0.
+pub fn validate_user_buffer(
+    ttbr0_phys: usize,
+    ptr: usize,
+    len: usize,
+    writable: bool,
+) -> Result<(), MmuError> {
+    // TEAM_152: Updated to use MmuError
+    // 1. Check user address space bounds
+    if ptr >= layout::USER_SPACE_END {
+        return Err(MmuError::InvalidVirtualAddress);
+    }
+    // Check for overflow or exceeding user space
+    if let Some(end) = ptr.checked_add(len) {
+        if end > layout::USER_SPACE_END {
+            return Err(MmuError::InvalidVirtualAddress);
+        }
+    } else {
+        return Err(MmuError::InvalidVirtualAddress);
+    }
+
+    if len == 0 {
+        return Ok(());
+    }
+
+    // 2. Get L0 table (Read-Only access pattern)
+    let l0_va = mmu::phys_to_virt(ttbr0_phys);
+    // SAFETY: ttbr0_phys is guaranteed to be a valid page table by caller (process struct)
+    let l0 = unsafe { &*(l0_va as *const PageTable) };
+
+    // 3. Iterate over every page touched by the buffer
+    let mut current = ptr;
+    let end = ptr + len;
+
+    while current < end {
+        // Translate VA -> PA + Flags
+        match mmu::translate(l0, current) {
+            Some((_pa, flags)) => {
+                // Check VALID bit (implicit in translate, but good to be explicit)
+                if !flags.contains(PageFlags::VALID) {
+                    return Err(MmuError::NotMapped);
+                }
+
+                if !flags.is_user() {
+                    return Err(MmuError::NotMapped);
+                }
+
+                // Check Write Permission if requested
+                if writable && !flags.is_writable() {
+                    return Err(MmuError::NotMapped);
+                }
+            }
+            None => return Err(MmuError::NotMapped),
+        }
+
+        // Move to next page boundary
+        // If current is 0x1000, next is 0x2000.
+        // If current is 0x1005, next is 0x2000.
+        // Formula: (current & !0xFFF) + 0x1000
+        let next_page = (current & !0xFFF) + PAGE_SIZE;
+        current = next_page;
+    }
+
+    Ok(())
+}

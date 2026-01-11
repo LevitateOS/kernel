@@ -1,0 +1,15 @@
+# TEAM_422: Memory Management Crate
+[package]
+name = "los_mm"
+version = "0.1.0"
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+los_hal = { path = "../hal" }
+los_error = { path = "../error" }
+los_utils = { path = "../utils" }
+log = "0.4"
+bitflags = { workspace = true }
