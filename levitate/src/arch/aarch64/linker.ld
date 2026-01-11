@@ -20,6 +20,45 @@ SECTIONS
         KEEP(*(.text.boot))
     }
 
+    /* Boot-time data accessible from physical address space.
+     * BOOT_REGS and BOOT_DTB_ADDR must be here because boot code uses
+     * adrp which has ±4GB range - can't reach higher-half from 0x40080000.
+     */
+    .data.boot : {
+        *(.data.boot)
+        *(.data.boot.*)
+    }
+
+    .bss.boot (NOLOAD) : {
+        __bss_boot_start = .;
+        *(.bss.boot)
+        *(.bss.boot.*)
+        . = ALIGN(16);
+        __bss_boot_end = .;
+    }
+
+    /* Early page tables for boot MMU setup (must be 4KB aligned)
+     * These are used by boot.S before jumping to higher-half Rust code.
+     * Layout:
+     * - __boot_l0_ttbr1: L0 for TTBR1 (higher-half)
+     * - __boot_l0_ttbr0: L0 for TTBR0 (identity map)
+     * - __boot_l1_high:  L1 for higher-half mapping
+     * - __boot_l1_low:   L1 for identity mapping
+     */
+    . = ALIGN(4096);
+    __boot_page_tables_start = .;
+    .boot_page_tables (NOLOAD) : {
+        __boot_l0_ttbr1 = .;
+        . = . + 4096;
+        __boot_l0_ttbr0 = .;
+        . = . + 4096;
+        __boot_l1_high = .;
+        . = . + 4096;
+        __boot_l1_low = .;
+        . = . + 4096;
+    }
+    __boot_page_tables_end = .;
+
     /* Higher-Half Virtual Address Base */
     _kernel_virt_base = 0xFFFF800000000000;
     . += _kernel_virt_base;

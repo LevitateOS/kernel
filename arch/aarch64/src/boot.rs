@@ -2,14 +2,64 @@ use core::arch::global_asm;
 
 global_asm!(include_str!("asm/boot.S"));
 
-/// TEAM_131: DTB address passed by bootloader (x0)
-/// Stored in a separate variable for verification.
-#[unsafe(no_mangle)]
-pub static mut BOOT_DTB_ADDR: u64 = 0;
+// =============================================================================
+// TEAM_422: Boot data handling for AArch64
+//
+// Problem: Boot code runs at physical 0x40080000, but Rust code runs at
+// higher-half 0xFFFF_8000... The adrp instruction has ±4GB range, so:
+// - Boot assembly CAN'T reach higher-half symbols
+// - Higher-half Rust code CAN'T reach physical-address symbols
+//
+// Solution: Two copies of boot data:
+// 1. BOOT_*_PHYS: In .bss.boot at physical address, written by boot assembly
+// 2. BOOT_*: Regular statics in higher-half, read by Rust code
+//
+// copy_boot_data() copies from physical to virtual using the identity mapping.
+// =============================================================================
 
-/// TEAM_043: Preserved registers from bootloader (x0-x3)
+/// Physical-address copy of DTB address (written by boot.S)
 #[unsafe(no_mangle)]
-pub static mut BOOT_REGS: [u64; 4] = [0; 4];
+#[unsafe(link_section = ".bss.boot")]
+pub static mut BOOT_DTB_ADDR_PHYS: u64 = 0;
+
+/// Physical-address copy of boot registers (written by boot.S)
+#[unsafe(no_mangle)]
+#[unsafe(link_section = ".bss.boot")]
+pub static mut BOOT_REGS_PHYS: [u64; 4] = [0; 4];
+
+/// Higher-half copy of DTB address (read by Rust code)
+static mut BOOT_DTB_ADDR: u64 = 0;
+
+/// Higher-half copy of boot registers (read by Rust code)
+static mut BOOT_REGS: [u64; 4] = [0; 4];
+
+/// Flag to track if boot data has been copied
+static mut BOOT_DATA_COPIED: bool = false;
+
+/// TEAM_422: Copy boot data from physical-address section to higher-half.
+///
+/// This must be called early in kernel initialization, after identity mapping
+/// is set up but before any code tries to read BOOT_REGS or BOOT_DTB_ADDR.
+///
+/// # Safety
+/// - Must be called exactly once during early boot
+/// - Identity mapping for physical kernel region must be active
+pub unsafe fn copy_boot_data() {
+    // Get physical addresses of the boot data through linker symbols
+    unsafe extern "C" {
+        static BOOT_DTB_ADDR_PHYS: u64;
+        static BOOT_REGS_PHYS: [u64; 4];
+    }
+
+    // Read from physical addresses (identity mapped)
+    let dtb = core::ptr::read_volatile(core::ptr::addr_of!(BOOT_DTB_ADDR_PHYS));
+    let regs = core::ptr::read_volatile(core::ptr::addr_of!(BOOT_REGS_PHYS));
+
+    // Write to higher-half copies
+    BOOT_DTB_ADDR = dtb;
+    BOOT_REGS = regs;
+    BOOT_DATA_COPIED = true;
+}
 
 use linked_list_allocator::LockedHeap;
 #[global_allocator]
