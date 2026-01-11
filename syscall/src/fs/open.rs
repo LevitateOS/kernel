@@ -3,10 +3,10 @@ use los_vfs::error::VfsError;
 use los_vfs::file::OpenFlags;
 // TEAM_420: Direct linux_raw_sys imports, no shims
 // TEAM_421: Import SyscallResult
-use crate::{read_user_cstring, SyscallResult};
-use los_sched::fd_table::FdType;
-use linux_raw_sys::errno::{EACCES, EBADF, EEXIST, EINVAL, EIO, EMFILE, ENOMEM, ENOENT, ENOTDIR};
+use crate::{SyscallResult, read_user_cstring};
+use linux_raw_sys::errno::{EACCES, EBADF, EEXIST, EINVAL, EIO, EMFILE, ENOENT, ENOMEM, ENOTDIR};
 use linux_raw_sys::general::AT_FDCWD;
+use los_sched::fd_table::FdType;
 
 /// TEAM_345: sys_openat - Linux ABI compatible.
 /// TEAM_421: Updated to return SyscallResult.
@@ -26,7 +26,10 @@ pub fn sys_openat(dirfd: i32, pathname: usize, flags: u32, _mode: u32) -> Syscal
     // For now, we only support AT_FDCWD - relative paths with other dirfd not yet implemented
     if dirfd != AT_FDCWD && !path_str.starts_with('/') {
         // TODO(TEAM_345): Implement dirfd-relative path resolution
-        log::warn!("[SYSCALL] openat: dirfd {} not yet supported for relative paths", dirfd);
+        log::warn!(
+            "[SYSCALL] openat: dirfd {} not yet supported for relative paths",
+            dirfd
+        );
         return Err(EBADF);
     }
 
@@ -85,7 +88,11 @@ pub fn sys_close(fd: usize) -> SyscallResult {
         return Err(EINVAL);
     }
 
-    if fd_table.close(fd) { Ok(0) } else { Err(EBADF) }
+    if fd_table.close(fd) {
+        Ok(0)
+    } else {
+        Err(EBADF)
+    }
 }
 
 // ============================================================================
@@ -96,7 +103,7 @@ pub fn sys_close(fd: usize) -> SyscallResult {
 /// TEAM_423: Allow unused - these are public API for future use
 #[allow(unused)]
 pub mod access_mode {
-    pub use linux_raw_sys::general::{F_OK, X_OK, W_OK, R_OK};
+    pub use linux_raw_sys::general::{F_OK, R_OK, W_OK, X_OK};
 }
 
 /// TEAM_350: sys_faccessat - Check file accessibility.

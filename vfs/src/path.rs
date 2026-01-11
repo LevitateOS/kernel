@@ -70,7 +70,7 @@ impl Path {
     pub fn parent(&self) -> Option<&Path> {
         let mut components = self.components();
         let last = components.next_back();
-        
+
         last.and_then(|c| match c {
             Component::Normal(_) | Component::CurDir | Component::ParentDir => {
                 Some(components.as_path())
@@ -123,21 +123,21 @@ impl Path {
     /// TEAM_201: Strip a prefix from this path
     pub fn strip_prefix<P: AsRef<Path>>(&self, prefix: P) -> Option<&Path> {
         let prefix = prefix.as_ref();
-        
+
         if !self.starts_with(prefix) {
             return None;
         }
 
         let prefix_str = prefix.as_str().trim_end_matches('/');
         let self_str = self.as_str();
-        
+
         if prefix_str.is_empty() {
             return Some(self);
         }
 
         let remainder = &self_str[prefix_str.len()..];
         let remainder = remainder.trim_start_matches('/');
-        
+
         Some(Path::new(remainder))
     }
 }
@@ -349,7 +349,7 @@ impl<'a> Components<'a> {
         let path_str = path.as_str();
         let has_root = path_str.starts_with('/');
         let trimmed = path_str.trim_start_matches('/').trim_end_matches('/');
-        
+
         Self {
             path: trimmed,
             has_root,
@@ -394,7 +394,7 @@ impl<'a> Iterator for Components<'a> {
             let remaining = &self.path[self.front..self.back];
             let end = remaining.find('/').unwrap_or(remaining.len());
             let component = &remaining[..end];
-            
+
             self.front += end;
             // Skip the slash
             if self.front < self.back {
@@ -431,7 +431,7 @@ impl<'a> DoubleEndedIterator for Components<'a> {
             let remaining = &self.path[self.front..self.back];
             let start = remaining.rfind('/').map(|i| i + 1).unwrap_or(0);
             let component = &remaining[start..];
-            
+
             self.back = self.front + start;
             // Skip the slash
             if self.back > self.front && self.back > 0 {

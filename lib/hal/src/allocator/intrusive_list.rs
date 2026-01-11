@@ -111,7 +111,10 @@ impl<T: ListNode> IntrusiveList<T> {
         // SAFETY: head is a valid NonNull from self.head.
         // The pointer is non-null by NonNull invariant.
         unsafe {
-            let head_ref = head.as_ptr().as_mut().expect("TEAM_135: NonNull was null - impossible");
+            let head_ref = head
+                .as_ptr()
+                .as_mut()
+                .expect("TEAM_135: NonNull was null - impossible");
             self.remove(head_ref);
         }
 

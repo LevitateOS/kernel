@@ -4,9 +4,13 @@
 //! TEAM_417: Extracted from process.rs.
 //! TEAM_421: Returns SyscallResult, no scattered casts.
 
-use los_mm::user as mm_user;
 use crate::SyscallResult;
+#[cfg(not(target_arch = "x86_64"))]
+use linux_raw_sys::errno::ENOSYS;
+#[cfg(target_arch = "x86_64")]
 use linux_raw_sys::errno::{EFAULT, EINVAL};
+#[cfg(target_arch = "x86_64")]
+use los_mm::user as mm_user;
 
 // ============================================================================
 // TEAM_350: arch_prctl (x86_64 only) - Set architecture-specific thread state
@@ -55,8 +59,7 @@ pub fn sys_arch_prctl(code: i32, addr: usize) -> SyscallResult {
             // TEAM_409: Store in BOTH task.tls AND context.fs_base for context switch restore
             // The context switch assembly restores from context.fs_base, not task.tls
             let task = los_sched::current_task();
-            task.tls
-                .store(addr, core::sync::atomic::Ordering::Release);
+            task.tls.store(addr, core::sync::atomic::Ordering::Release);
             // SAFETY: We're modifying our own context which won't be used until we context switch out
             unsafe {
                 let ctx_ptr = &task.context as *const _ as *mut los_arch_x86_64::Context;

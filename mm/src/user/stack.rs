@@ -7,7 +7,7 @@ use alloc::vec::Vec;
 
 use los_hal::mmu::{MmuError, PAGE_SIZE, PageFlags};
 
-use super::auxv::{AuxEntry, AT_HWCAP, AT_NULL, AT_PAGESZ, AT_RANDOM};
+use super::auxv::{AT_HWCAP, AT_NULL, AT_PAGESZ, AT_RANDOM, AuxEntry};
 use super::layout;
 use super::mapping::{alloc_zero_map_page, user_va_to_kernel_ptr};
 
@@ -23,7 +23,10 @@ pub(super) struct StackWriter {
 impl StackWriter {
     /// Create a new StackWriter starting at the given stack pointer.
     pub fn new(ttbr0_phys: usize, stack_top: usize) -> Self {
-        Self { ttbr0_phys, sp: stack_top }
+        Self {
+            ttbr0_phys,
+            sp: stack_top,
+        }
     }
 
     /// Get the current stack pointer.
@@ -38,7 +41,9 @@ impl StackWriter {
             let ptr = user_va_to_kernel_ptr(self.ttbr0_phys, self.sp + i)
                 .ok_or(MmuError::InvalidVirtualAddress)?;
             // SAFETY: ptr is valid from user_va_to_kernel_ptr
-            unsafe { *ptr = byte; }
+            unsafe {
+                *ptr = byte;
+            }
         }
         Ok(())
     }
@@ -49,7 +54,9 @@ impl StackWriter {
         let ptr = user_va_to_kernel_ptr(self.ttbr0_phys, self.sp)
             .ok_or(MmuError::InvalidVirtualAddress)?;
         // SAFETY: ptr is valid and aligned for usize write
-        unsafe { *(ptr as *mut usize) = val; }
+        unsafe {
+            *(ptr as *mut usize) = val;
+        }
         Ok(())
     }
 
@@ -65,13 +72,17 @@ impl StackWriter {
             let ptr = user_va_to_kernel_ptr(self.ttbr0_phys, str_ptr + i)
                 .ok_or(MmuError::InvalidVirtualAddress)?;
             // SAFETY: ptr is valid from user_va_to_kernel_ptr
-            unsafe { *ptr = byte; }
+            unsafe {
+                *ptr = byte;
+            }
         }
         // Null terminator
         let ptr = user_va_to_kernel_ptr(self.ttbr0_phys, str_ptr + s.len())
             .ok_or(MmuError::InvalidVirtualAddress)?;
         // SAFETY: ptr is valid from user_va_to_kernel_ptr
-        unsafe { *ptr = 0; }
+        unsafe {
+            *ptr = 0;
+        }
 
         Ok(str_ptr)
     }
@@ -185,10 +196,22 @@ pub fn setup_stack_args(
 
     // 2. Write Auxiliary Vector (auxv) with mandatory entries
     let mut final_auxv = Vec::from(auxv);
-    final_auxv.push(AuxEntry { a_type: AT_PAGESZ, a_val: PAGE_SIZE });
-    final_auxv.push(AuxEntry { a_type: AT_HWCAP, a_val: 0 }); // TODO: Pass actual HWCAP
-    final_auxv.push(AuxEntry { a_type: AT_RANDOM, a_val: random_ptr });
-    final_auxv.push(AuxEntry { a_type: AT_NULL, a_val: 0 });
+    final_auxv.push(AuxEntry {
+        a_type: AT_PAGESZ,
+        a_val: PAGE_SIZE,
+    });
+    final_auxv.push(AuxEntry {
+        a_type: AT_HWCAP,
+        a_val: 0,
+    }); // TODO: Pass actual HWCAP
+    final_auxv.push(AuxEntry {
+        a_type: AT_RANDOM,
+        a_val: random_ptr,
+    });
+    final_auxv.push(AuxEntry {
+        a_type: AT_NULL,
+        a_val: 0,
+    });
 
     for entry in final_auxv.iter().rev() {
         sw.write_usize(entry.a_val)?;
@@ -210,6 +233,10 @@ pub fn setup_stack_args(
     // 5. Write argc
     sw.write_usize(args.len())?;
 
-    debug_assert!(sw.sp() % 16 == 0, "Stack not 16-byte aligned: sp=0x{:x}", sw.sp());
+    debug_assert!(
+        sw.sp() % 16 == 0,
+        "Stack not 16-byte aligned: sp=0x{:x}",
+        sw.sp()
+    );
     Ok(sw.sp())
 }

@@ -4,8 +4,8 @@
 //! the parent process, as required for Linux-compatible threading.
 
 extern crate alloc;
-use alloc::sync::Arc;
 use alloc::string::String;
+use alloc::sync::Arc;
 use alloc::vec;
 use core::sync::atomic::{AtomicU8, AtomicU32, AtomicUsize, Ordering};
 

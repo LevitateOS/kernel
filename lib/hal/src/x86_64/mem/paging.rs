@@ -236,13 +236,17 @@ where
 
     // At PD level (p2), we set a huge page entry instead of pointing to a PT
     let index = pd_index(virt);
-    p2.entries[index].set_address(phys, flags | PageTableFlags::PRESENT | PageTableFlags::HUGE_PAGE);
+    p2.entries[index].set_address(
+        phys,
+        flags | PageTableFlags::PRESENT | PageTableFlags::HUGE_PAGE,
+    );
     Ok(())
 }
 
 /// Check if an entry at PD level is a 2MB huge page
 pub fn is_huge_page(entry: &PageTableEntry) -> bool {
-    entry.flags().contains(PageTableFlags::PRESENT) && entry.flags().contains(PageTableFlags::HUGE_PAGE)
+    entry.flags().contains(PageTableFlags::PRESENT)
+        && entry.flags().contains(PageTableFlags::HUGE_PAGE)
 }
 
 /// Translate a virtual address, handling both 4KB and 2MB pages.

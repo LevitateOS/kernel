@@ -4,13 +4,31 @@
 
 // TEAM_419: File mode constants from linux-raw-sys
 pub use linux_raw_sys::general::{
+    S_IFBLK,
+    S_IFCHR,
+    S_IFDIR,
+    S_IFIFO,
+    S_IFLNK,
     // File type constants
-    S_IFMT, S_IFSOCK, S_IFLNK, S_IFREG, S_IFBLK, S_IFDIR, S_IFCHR, S_IFIFO,
+    S_IFMT,
+    S_IFREG,
+    S_IFSOCK,
+    S_IRGRP,
+    S_IROTH,
+    S_IRUSR,
+    S_IRWXG,
+    S_IRWXO,
+    S_IRWXU,
+    S_ISGID,
     // Permission constants
-    S_ISUID, S_ISGID, S_ISVTX,
-    S_IRWXU, S_IRUSR, S_IWUSR, S_IXUSR,
-    S_IRWXG, S_IRGRP, S_IWGRP, S_IXGRP,
-    S_IRWXO, S_IROTH, S_IWOTH, S_IXOTH,
+    S_ISUID,
+    S_ISVTX,
+    S_IWGRP,
+    S_IWOTH,
+    S_IWUSR,
+    S_IXGRP,
+    S_IXOTH,
+    S_IXUSR,
 };
 
 // ============================================================================

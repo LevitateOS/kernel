@@ -1,9 +1,9 @@
 // TEAM_142: System syscalls
 // TEAM_421: Returns SyscallResult, no scattered casts
 
-use los_mm::user as mm_user;
 use crate::SyscallResult;
 use linux_raw_sys::errno::EFAULT;
+use los_mm::user as mm_user;
 
 /// TEAM_142: Shutdown flags for verbose mode
 pub mod shutdown_flags {
@@ -54,10 +54,10 @@ pub fn sys_shutdown(flags: u32) -> SyscallResult {
     los_hal::interrupts::disable();
 
     // TEAM_422: Use arch-specific power module
-#[cfg(target_arch = "x86_64")]
-los_arch_x86_64::power::system_off();
-#[cfg(target_arch = "aarch64")]
-los_arch_aarch64::power::system_off();
+    #[cfg(target_arch = "x86_64")]
+    los_arch_x86_64::power::system_off();
+    #[cfg(target_arch = "aarch64")]
+    los_arch_aarch64::power::system_off();
 }
 
 // ============================================================================

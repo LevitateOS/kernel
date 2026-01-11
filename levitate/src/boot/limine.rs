@@ -13,11 +13,9 @@
 //! - https://github.com/limine-bootloader/limine/blob/trunk/PROTOCOL.md
 //! - https://crates.io/crates/limine
 
-use super::{
-    BootInfo, BootProtocol, Framebuffer, MemoryKind, MemoryRegion, PixelFormat,
-};
 #[cfg(target_arch = "x86_64")]
 use super::FirmwareInfo;
+use super::{BootInfo, BootProtocol, Framebuffer, MemoryKind, MemoryRegion, PixelFormat};
 use limine::BaseRevision;
 use limine::memory_map::EntryType;
 use limine::request::{

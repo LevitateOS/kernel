@@ -4,9 +4,9 @@
 
 use crate::SyscallFrame;
 use crate::SyscallResult;
+use core::sync::atomic::Ordering;
 use linux_raw_sys::errno::{EFAULT, EINVAL, ENOENT, ESRCH};
 use los_sched::{TaskState, current_task, scheduler};
-use core::sync::atomic::Ordering;
 
 /// TEAM_220: Signal constants
 pub const SIGINT: i32 = 2;
@@ -133,7 +133,11 @@ pub fn sys_sigreturn(frame: &mut SyscallFrame) -> SyscallResult {
 /// Ok(0) on success
 #[allow(unused_variables)]
 pub fn sys_sigaltstack(ss: usize, old_ss: usize) -> SyscallResult {
-    log::trace!("[SYSCALL] sigaltstack(ss=0x{:x}, old_ss=0x{:x}) -> 0", ss, old_ss);
+    log::trace!(
+        "[SYSCALL] sigaltstack(ss=0x{:x}, old_ss=0x{:x}) -> 0",
+        ss,
+        old_ss
+    );
     // TEAM_360: Stub - alternate signal stack not implemented
     // Return success so programs that call this can continue
     Ok(0)

@@ -3,11 +3,11 @@
 //! Gated on `std` feature because this is a no_std crate.
 //! Run with: cargo test -p levitate-hal --features std
 
+use super::PAGE_ALLOCATOR_PTR;
 use super::constants::*;
 use super::mapping::*;
 use super::ops::*;
 use super::types::*;
-use super::PAGE_ALLOCATOR_PTR;
 use crate::traits::PageAllocator;
 
 // === Flag Construction Tests ===

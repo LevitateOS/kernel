@@ -2,10 +2,10 @@
 //! TEAM_409: Implemented QEMU debug exit for proper VM termination
 
 /// Exit QEMU using the debug exit device.
-/// 
+///
 /// This uses I/O port 0xf4 which is the QEMU isa-debug-exit device.
 /// The exit code will be (value << 1) | 1, so writing 0 gives exit code 1.
-/// 
+///
 /// If QEMU wasn't started with `-device isa-debug-exit`, this is a no-op
 /// and we fall back to HLT loop.
 pub fn system_off() -> ! {
@@ -21,7 +21,7 @@ pub fn system_off() -> ! {
             options(nomem, nostack, preserves_flags)
         );
     }
-    
+
     // Fallback: if debug exit device not available, halt the CPU
     loop {
         unsafe { core::arch::asm!("hlt", options(nomem, nostack, preserves_flags)) };

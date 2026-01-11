@@ -27,8 +27,8 @@ pub use los_vfs::mount;
 
 // Re-export common VFS types at fs level for convenience
 pub use los_vfs::{
-    dcache, Dentry, DentryCache, File, FileRef, Inode, InodeRef, OpenFlags, Pipe, PipeRef,
-    Superblock, SuperblockRef, VfsError, VfsResult,
+    Dentry, DentryCache, File, FileRef, Inode, InodeRef, OpenFlags, Pipe, PipeRef, Superblock,
+    SuperblockRef, VfsError, VfsResult, dcache,
 };
 
 /// TEAM_120: Global initramfs superblock for syscall access.

@@ -5,10 +5,10 @@
 //! - **VGA** - Text-mode VGA buffer for screen output
 //! - **Console** - Unified console writer abstraction
 
+pub mod console;
 pub mod serial;
 pub mod vga;
-pub mod console;
 
+pub use console::WRITER;
 pub use serial::SerialPort;
 pub use vga::{Color, ColorCode};
-pub use console::WRITER;

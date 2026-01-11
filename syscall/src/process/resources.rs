@@ -18,22 +18,22 @@ pub use crate::types::Timeval;
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
 pub struct Rusage {
-    pub ru_utime: Timeval,  // User time used
-    pub ru_stime: Timeval,  // System time used
-    pub ru_maxrss: i64,     // Maximum resident set size
-    pub ru_ixrss: i64,      // Integral shared memory size
-    pub ru_idrss: i64,      // Integral unshared data size
-    pub ru_isrss: i64,      // Integral unshared stack size
-    pub ru_minflt: i64,     // Page reclaims (soft page faults)
-    pub ru_majflt: i64,     // Page faults (hard page faults)
-    pub ru_nswap: i64,      // Swaps
-    pub ru_inblock: i64,    // Block input operations
-    pub ru_oublock: i64,    // Block output operations
-    pub ru_msgsnd: i64,     // IPC messages sent
-    pub ru_msgrcv: i64,     // IPC messages received
-    pub ru_nsignals: i64,   // Signals received
-    pub ru_nvcsw: i64,      // Voluntary context switches
-    pub ru_nivcsw: i64,     // Involuntary context switches
+    pub ru_utime: Timeval, // User time used
+    pub ru_stime: Timeval, // System time used
+    pub ru_maxrss: i64,    // Maximum resident set size
+    pub ru_ixrss: i64,     // Integral shared memory size
+    pub ru_idrss: i64,     // Integral unshared data size
+    pub ru_isrss: i64,     // Integral unshared stack size
+    pub ru_minflt: i64,    // Page reclaims (soft page faults)
+    pub ru_majflt: i64,    // Page faults (hard page faults)
+    pub ru_nswap: i64,     // Swaps
+    pub ru_inblock: i64,   // Block input operations
+    pub ru_oublock: i64,   // Block output operations
+    pub ru_msgsnd: i64,    // IPC messages sent
+    pub ru_msgrcv: i64,    // IPC messages received
+    pub ru_nsignals: i64,  // Signals received
+    pub ru_nvcsw: i64,     // Voluntary context switches
+    pub ru_nivcsw: i64,    // Involuntary context switches
 }
 
 /// TEAM_409: sys_getrusage - Get resource usage.
@@ -78,8 +78,8 @@ pub fn sys_getrusage(who: i32, usage: usize) -> SyscallResult {
 
 // TEAM_419: Resource limit constants from linux-raw-sys
 use linux_raw_sys::general::{
-    RLIMIT_CPU, RLIMIT_FSIZE, RLIMIT_DATA, RLIMIT_STACK, RLIMIT_CORE,
-    RLIMIT_RSS, RLIMIT_NPROC, RLIMIT_NOFILE, RLIMIT_MEMLOCK, RLIMIT_AS,
+    RLIMIT_AS, RLIMIT_CORE, RLIMIT_CPU, RLIMIT_DATA, RLIMIT_FSIZE, RLIMIT_MEMLOCK, RLIMIT_NOFILE,
+    RLIMIT_NPROC, RLIMIT_RSS, RLIMIT_STACK,
 };
 // RLIM_INFINITY is -1 as i32 in linux-raw-sys, but we need u64::MAX for the ABI
 const RLIM_INFINITY: u64 = u64::MAX;

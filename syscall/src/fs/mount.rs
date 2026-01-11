@@ -2,8 +2,8 @@
 // TEAM_421: Returns SyscallResult, no scattered casts
 
 use crate::SyscallResult;
-use linux_raw_sys::errno::{EACCES, EBUSY, EFAULT, EINVAL, ENOENT};
 use core::convert::TryFrom;
+use linux_raw_sys::errno::{EACCES, EBUSY, EFAULT, EINVAL, ENOENT};
 
 // TEAM_206: Mount a filesystem
 /// TEAM_421: Returns SyscallResult

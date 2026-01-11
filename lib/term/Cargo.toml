@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2024"
 readme = "README.md"
 
+[lints]
+workspace = true
+
 [dependencies]
 los_utils = { path = "../utils" }
 embedded-graphics = "0.8.1"

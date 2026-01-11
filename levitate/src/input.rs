@@ -9,11 +9,11 @@
 //!
 //! TEAM_331: Added PCI transport support for x86_64
 
+use alloc::vec::Vec;
 use log;
 #[cfg(target_arch = "aarch64")]
 use los_hal::virtio::StaticMmioTransport;
 use los_hal::{InterruptHandler, IrqId, VirtioHal};
-use alloc::vec::Vec;
 use los_utils::Mutex;
 use virtio_drivers::device::input::VirtIOInput;
 
@@ -81,17 +81,15 @@ pub fn init(transport: StaticMmioTransport, slot: usize) {
 #[cfg(target_arch = "x86_64")]
 pub fn init_pci() {
     log::info!("[INPUT] Initializing Input via PCI...");
-    
+
     match los_pci::find_virtio_input::<VirtioHal>() {
-        Some(transport) => {
-            match VirtIOInput::<VirtioHal, los_pci::PciTransport>::new(transport) {
-                Ok(input) => {
-                    log::info!("[INPUT] VirtIO Input initialized via PCI.");
-                    INPUT_DEVICES.lock().push(InputDevice::Pci(input));
-                }
-                Err(e) => log::error!("[INPUT] Failed to create VirtIO Input: {:?}", e),
+        Some(transport) => match VirtIOInput::<VirtioHal, los_pci::PciTransport>::new(transport) {
+            Ok(input) => {
+                log::info!("[INPUT] VirtIO Input initialized via PCI.");
+                INPUT_DEVICES.lock().push(InputDevice::Pci(input));
             }
-        }
+            Err(e) => log::error!("[INPUT] Failed to create VirtIO Input: {:?}", e),
+        },
         None => {
             log::warn!("[INPUT] No VirtIO Input found on PCI bus");
         }
@@ -181,8 +179,7 @@ fn poll_input_device<T: virtio_drivers::transport::Transport>(
                             crate::syscall::signal::signal_foreground_process(
                                 crate::syscall::signal::SIGINT,
                             );
-                        } else if let Some(c) = linux_code_to_ascii(code, *SHIFT_PRESSED.lock())
-                        {
+                        } else if let Some(c) = linux_code_to_ascii(code, *SHIFT_PRESSED.lock()) {
                             // TEAM_156: Don't silently drop - log overflow
                             if !KEYBOARD_BUFFER.lock().push(c) {
                                 crate::verbose!("KEYBOARD_BUFFER overflow, char dropped");

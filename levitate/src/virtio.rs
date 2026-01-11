@@ -33,7 +33,7 @@ pub const VIRTIO_MMIO_COUNT: usize = 32;
 pub fn init_gpu() -> bool {
     // TEAM_336: Detect GPU transport based on architecture
     let transport = detect_gpu_transport();
-    
+
     // Call gpu::init with the detected transport
     crate::gpu::init(transport);
 

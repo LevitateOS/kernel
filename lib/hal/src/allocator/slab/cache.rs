@@ -175,9 +175,9 @@ impl SlabCache {
     ///
     /// Returns pointer to the new page, which has been added to partial list.
     fn grow(&mut self) -> Option<NonNull<SlabPage>> {
-        use crate::memory::FRAME_ALLOCATOR; // TEAM_051: Now in HAL
         #[cfg(target_arch = "aarch64")]
         use crate::aarch64::mmu;
+        use crate::memory::FRAME_ALLOCATOR; // TEAM_051: Now in HAL
         #[cfg(target_arch = "x86_64")]
         use crate::x86_64::mem::mmu;
 
@@ -233,8 +233,8 @@ mod tests {
         let cache = SlabCache::new(0);
         assert_eq!(cache.class_index, 0);
         assert!(cache.partial.is_empty()); // [SC3] empty
-        assert!(cache.full.is_empty());    // [SC3] empty
-        assert!(cache.empty.is_empty());   // [SC3] empty
+        assert!(cache.full.is_empty()); // [SC3] empty
+        assert!(cache.empty.is_empty()); // [SC3] empty
         assert_eq!(cache.total_allocs, 0);
         assert_eq!(cache.total_frees, 0);
     }

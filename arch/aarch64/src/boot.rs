@@ -194,6 +194,9 @@ pub fn print_boot_regs() {
     let regs = unsafe { BOOT_REGS };
     log::info!(
         "BOOT_REGS: x0={:x} x1={:x} x2={:x} x3={:x}",
-        regs[0], regs[1], regs[2], regs[3]
+        regs[0],
+        regs[1],
+        regs[2],
+        regs[3]
     );
 }

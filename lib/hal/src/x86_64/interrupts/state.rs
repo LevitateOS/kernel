@@ -21,14 +21,18 @@ mod real_impl {
     /// [I7] Unconditionally enables interrupts
     #[inline(always)]
     pub unsafe fn enable() {
-        unsafe { core::arch::asm!("sti", options(nomem, nostack)); }
+        unsafe {
+            core::arch::asm!("sti", options(nomem, nostack));
+        }
     }
 
     /// [I3] Restores previous interrupt state
     #[inline(always)]
     pub fn restore(state: u64) {
         if (state & 0x200) != 0 {
-            unsafe { enable(); }
+            unsafe {
+                enable();
+            }
         }
     }
 

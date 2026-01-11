@@ -22,8 +22,8 @@ use embedded_graphics::pixelcolor::Rgb888;
 use embedded_graphics::prelude::*;
 use los_hal::serial_println;
 use virtio_drivers::device::gpu::VirtIOGpu;
-use virtio_drivers::Hal;
 use virtio_drivers::transport::Transport;
+use virtio_drivers::Hal;
 
 // ============================================================================
 // GPU Error Types

@@ -54,7 +54,10 @@ mod aarch64_handlers {
     pub extern "C" fn handle_user_exception(ec: u64, esr: u64, elr: u64, far: u64) -> ! {
         log::error!(
             "User exception: EC={:#x} ESR={:#x} ELR={:#x} FAR={:#x}",
-            ec, esr, elr, far
+            ec,
+            esr,
+            elr,
+            far
         );
         crate::arch::cpu::halt();
     }
@@ -125,7 +128,7 @@ pub fn kernel_main_unified(boot_info: &crate::boot::BootInfo) -> ! {
         unsafe {
             core::arch::asm!("mov al, 'k'", "out dx, al", out("ax") _, out("dx") _);
         }
-        los_hal::arch::init();  // TEAM_316: Simple init, Limine handles page tables
+        los_hal::arch::init(); // TEAM_316: Simple init, Limine handles page tables
     }
     #[cfg(not(target_arch = "x86_64"))]
     los_hal::arch::init();
@@ -273,23 +276,31 @@ fn alloc_error(layout: core::alloc::Layout) -> ! {
         (allocator.used(), allocator.free())
     };
     let heap_total = heap_used + heap_free;
-    
+
     println!("\n[OOM] ALLOCATION FAILED");
-    println!("  requested: {} bytes (align {})", layout.size(), layout.align());
-    println!("  heap: {}/{} bytes used ({} free)",
-        heap_used, heap_total, heap_free);
-    
+    println!(
+        "  requested: {} bytes (align {})",
+        layout.size(),
+        layout.align()
+    );
+    println!(
+        "  heap: {}/{} bytes used ({} free)",
+        heap_used, heap_total, heap_free
+    );
+
     // Diagnostic hints
     if layout.size() > heap_free {
         println!("  cause: insufficient free memory");
     } else {
         println!("  cause: likely fragmentation (enough free but not contiguous)");
     }
-    
+
     if layout.size() > 1024 * 1024 {
-        println!("  hint: large allocation ({}MB) - consider chunking",
-            layout.size() / (1024 * 1024));
+        println!(
+            "  hint: large allocation ({}MB) - consider chunking",
+            layout.size() / (1024 * 1024)
+        );
     }
-    
+
     panic!("out of memory");
 }

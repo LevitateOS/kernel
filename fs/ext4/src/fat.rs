@@ -86,9 +86,7 @@ pub fn mount_and_list<B: BlockDeviceOps>(block_ops: B) -> Result<Vec<String>, Fs
         .open_volume(VolumeIdx(0))
         .map_err(|_| FsError::VolumeOpen)?;
 
-    let root_dir = volume
-        .open_root_dir()
-        .map_err(|_| FsError::DirOpen)?;
+    let root_dir = volume.open_root_dir().map_err(|_| FsError::DirOpen)?;
 
     let mut entries = Vec::new();
     let _ = root_dir.iterate_dir(|entry| {

@@ -2,7 +2,7 @@
 // Behaviors: [I1]-[I6] interrupt enable/disable/restore cycle
 // TEAM_132: Migrate DAIF to aarch64-cpu
 
-use aarch64_cpu::registers::{Readable, Writeable, DAIF};
+use aarch64_cpu::registers::{DAIF, Readable, Writeable};
 
 /// [I1] Disables interrupts, [I2] returns previous state
 #[inline(always)]

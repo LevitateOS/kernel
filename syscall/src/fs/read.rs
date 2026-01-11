@@ -5,10 +5,10 @@ use los_vfs::error::VfsError;
 // TEAM_420: Direct linux_raw_sys imports, no shims
 // TEAM_421: Return SyscallResult directly - NO ERRNO CASTS
 // TEAM_422: Arc<dyn Any> downcasting for type-erased FdType handles
-use crate::{write_to_user_buf, SyscallResult};
-use los_sched::fd_table::FdType;
-use los_fs_tty::pty::PtyPair;
+use crate::{SyscallResult, write_to_user_buf};
 use linux_raw_sys::errno::{EBADF, EFAULT, EINVAL, EIO};
+use los_fs_tty::pty::PtyPair;
+use los_sched::fd_table::FdType;
 
 /// TEAM_217: struct iovec for writev/readv
 #[repr(C)]

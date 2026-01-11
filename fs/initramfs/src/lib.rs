@@ -11,9 +11,9 @@ use alloc::sync::{Arc, Weak};
 use core::sync::atomic::{AtomicU64, Ordering};
 use los_utils::Mutex;
 
-use los_vfs::mode;
 use los_vfs::error::{VfsError, VfsResult};
 use los_vfs::inode::Inode;
+use los_vfs::mode;
 use los_vfs::ops::{DirEntry, InodeOps, SetAttr};
 use los_vfs::superblock::{StatFs, Superblock};
 

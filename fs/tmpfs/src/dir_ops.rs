@@ -9,9 +9,9 @@ use alloc::sync::Arc;
 use core::sync::atomic::Ordering;
 use los_utils::Mutex;
 
-use los_vfs::mode;
 use los_vfs::error::{VfsError, VfsResult};
 use los_vfs::inode::Inode;
+use los_vfs::mode;
 use los_vfs::ops::{DirEntry, InodeOps};
 
 use super::TMPFS;
@@ -307,11 +307,11 @@ impl InodeOps for TmpfsDirOps {
         if let Some(idx) = found_idx {
             let entry = parent_node.children.remove(idx);
             let child = entry.node;
-            
+
             // Decrement nlink in TmpfsNode
             let mut child_locked = child.lock();
             child_locked.nlink -= 1;
-            
+
             // If it was the last link, decrement global bytes_used
             if child_locked.nlink == 0 {
                 let tmpfs_lock = TMPFS.lock();
@@ -362,7 +362,7 @@ impl InodeOps for TmpfsDirOps {
         let parent_node_arc = inode
             .private::<Arc<Mutex<TmpfsNode>>>()
             .ok_or(VfsError::IoError)?;
-        
+
         let target_node_arc = target
             .private::<Arc<Mutex<TmpfsNode>>>()
             .ok_or(VfsError::IoError)?;
@@ -374,7 +374,7 @@ impl InodeOps for TmpfsDirOps {
 
         // Add child (handles name collision and setting parent weak ref)
         add_child(parent_node_arc, name, Arc::clone(target_node_arc))?;
-        
+
         // Increment link count
         target_node_arc.lock().nlink += 1;
         target.inc_nlink();

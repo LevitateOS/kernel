@@ -3,7 +3,7 @@
 //! Contains page table mapping, translation, and MmuInterface trait implementation.
 
 use super::constants::{
-    phys_to_virt, virt_to_phys, BLOCK_1GB_SIZE, BLOCK_2MB_MASK, BLOCK_2MB_SIZE, PAGE_SIZE,
+    BLOCK_1GB_SIZE, BLOCK_2MB_MASK, BLOCK_2MB_SIZE, PAGE_SIZE, phys_to_virt, virt_to_phys,
 };
 use super::init::{alloc_page_table, switch_ttbr0};
 use super::ops::{tlb_flush_page, va_l0_index, va_l1_index, va_l2_index, va_l3_index};

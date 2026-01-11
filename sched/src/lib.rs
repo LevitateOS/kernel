@@ -15,10 +15,10 @@ extern crate alloc;
 
 // TEAM_422: Architecture-specific imports
 #[cfg(target_arch = "aarch64")]
-use los_arch_aarch64::{cpu, Context, cpu_switch_to, switch_mmu_config};
+use los_arch_aarch64::{Context, cpu, cpu_switch_to, switch_mmu_config};
 
 #[cfg(target_arch = "x86_64")]
-use los_arch_x86_64::{cpu, Context, cpu_switch_to, switch_mmu_config};
+use los_arch_x86_64::{Context, cpu, cpu_switch_to, switch_mmu_config};
 
 use alloc::boxed::Box;
 use alloc::string::String;
@@ -332,8 +332,8 @@ impl Default for TaskControlBlock {
     }
 }
 
-use los_mm::heap::ProcessHeap;
 use crate::user::UserTask;
+use los_mm::heap::ProcessHeap;
 
 impl From<UserTask> for TaskControlBlock {
     fn from(user: UserTask) -> Self {
@@ -401,7 +401,11 @@ pub fn user_task_entry_wrapper() -> ! {
         #[cfg(target_arch = "aarch64")]
         {
             let tls = task.tls.load(core::sync::atomic::Ordering::Acquire);
-            los_hal::println!("[TASK] TEAM_408: Setting TPIDR_EL0 = 0x{:x} for PID={}", tls, task.id.0);
+            los_hal::println!(
+                "[TASK] TEAM_408: Setting TPIDR_EL0 = 0x{:x} for PID={}",
+                tls,
+                task.id.0
+            );
             core::arch::asm!("msr tpidr_el0, {}", in(reg) tls);
         }
 

@@ -4,10 +4,12 @@ use los_vfs::dispatch::*;
 use los_vfs::error::VfsError;
 // TEAM_420: Direct linux_raw_sys import, no shims
 // TEAM_421: Import SyscallResult
-use crate::{write_to_user_buf, SyscallResult};
-use los_sched::fd_table::FdType;
-use linux_raw_sys::errno::{EBADF, EEXIST, EFAULT, EINVAL, ENOENT, ENOTEMPTY, ENOTDIR, ERANGE, EXDEV};
+use crate::{SyscallResult, write_to_user_buf};
+use linux_raw_sys::errno::{
+    EBADF, EEXIST, EFAULT, EINVAL, ENOENT, ENOTDIR, ENOTEMPTY, ERANGE, EXDEV,
+};
 use linux_raw_sys::general::{AT_FDCWD, AT_REMOVEDIR};
+use los_sched::fd_table::FdType;
 
 // TEAM_176: Dirent64 structure for getdents syscall.
 // Matches Linux ABI layout.
@@ -91,8 +93,7 @@ pub fn sys_getdents(fd: usize, buf: usize, buf_len: usize) -> SyscallResult {
                             return Err(EFAULT);
                         }
 
-                        let _ =
-                            file.seek((offset + 1) as i64, los_vfs::ops::SeekWhence::Set);
+                        let _ = file.seek((offset + 1) as i64, los_vfs::ops::SeekWhence::Set);
                         bytes_written += reclen;
                     }
                     Ok(None) => break,
@@ -191,12 +192,7 @@ pub fn sys_unlinkat(dirfd: i32, pathname: usize, flags: u32) -> SyscallResult {
 /// TEAM_345: sys_renameat - Linux ABI compatible.
 /// TEAM_421: Updated to return SyscallResult.
 /// Signature: renameat(olddirfd, oldpath, newdirfd, newpath)
-pub fn sys_renameat(
-    olddirfd: i32,
-    oldpath: usize,
-    newdirfd: i32,
-    newpath: usize,
-) -> SyscallResult {
+pub fn sys_renameat(olddirfd: i32, oldpath: usize, newdirfd: i32, newpath: usize) -> SyscallResult {
     let task = los_sched::current_task();
 
     // TEAM_418: Use PATH_MAX from SSOT
@@ -209,7 +205,8 @@ pub fn sys_renameat(
 
     // TEAM_345: Handle dirfd
     if (olddirfd != AT_FDCWD && !old_path_str.starts_with('/'))
-        || (newdirfd != AT_FDCWD && !new_path_str.starts_with('/')) {
+        || (newdirfd != AT_FDCWD && !new_path_str.starts_with('/'))
+    {
         log::warn!("[SYSCALL] renameat: dirfd not yet supported");
         return Err(EBADF);
     }

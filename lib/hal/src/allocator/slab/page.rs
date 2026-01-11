@@ -105,7 +105,7 @@ impl SlabPage {
         if self.meta.allocated_count as usize >= objects_per_page {
             return None; // [SP7] returns None when full
         }
-        
+
         let slot = self.find_free_slot()?;
 
         self.set_allocated(slot);

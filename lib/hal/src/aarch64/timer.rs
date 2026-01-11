@@ -77,7 +77,7 @@ pub fn vhe_present() -> bool {
 fn detect_vhe() -> bool {
     #[cfg(target_arch = "aarch64")]
     {
-        use aarch64_cpu::registers::{Readable, ID_AA64MMFR1_EL1};
+        use aarch64_cpu::registers::{ID_AA64MMFR1_EL1, Readable};
         let mmfr1 = ID_AA64MMFR1_EL1.get();
         ((mmfr1 >> 8) & 0xF) != 0
     }
@@ -93,7 +93,7 @@ pub struct AArch64Timer;
 #[cfg(target_arch = "aarch64")]
 impl Timer for AArch64Timer {
     fn read_counter(&self) -> u64 {
-        use aarch64_cpu::registers::{Readable, CNTPCT_EL0, CNTVCT_EL0};
+        use aarch64_cpu::registers::{CNTPCT_EL0, CNTVCT_EL0, Readable};
         if vhe_present() {
             CNTPCT_EL0.get()
         } else {
@@ -102,12 +102,12 @@ impl Timer for AArch64Timer {
     }
 
     fn read_frequency(&self) -> u64 {
-        use aarch64_cpu::registers::{Readable, CNTFRQ_EL0};
+        use aarch64_cpu::registers::{CNTFRQ_EL0, Readable};
         CNTFRQ_EL0.get()
     }
 
     fn set_timeout(&self, ticks: u64) {
-        use aarch64_cpu::registers::{Writeable, CNTP_TVAL_EL0, CNTV_TVAL_EL0};
+        use aarch64_cpu::registers::{CNTP_TVAL_EL0, CNTV_TVAL_EL0, Writeable};
         if vhe_present() {
             CNTP_TVAL_EL0.set(ticks);
         } else {
@@ -116,7 +116,7 @@ impl Timer for AArch64Timer {
     }
 
     fn configure(&self, flags: TimerCtrlFlags) {
-        use aarch64_cpu::registers::{Writeable, CNTP_CTL_EL0, CNTV_CTL_EL0};
+        use aarch64_cpu::registers::{CNTP_CTL_EL0, CNTV_CTL_EL0, Writeable};
         if vhe_present() {
             CNTP_CTL_EL0.set(flags.bits());
         } else {
@@ -125,7 +125,7 @@ impl Timer for AArch64Timer {
     }
 
     fn is_pending(&self) -> bool {
-        use aarch64_cpu::registers::{Readable, CNTP_CTL_EL0, CNTV_CTL_EL0};
+        use aarch64_cpu::registers::{CNTP_CTL_EL0, CNTV_CTL_EL0, Readable};
         let val = if vhe_present() {
             CNTP_CTL_EL0.get()
         } else {

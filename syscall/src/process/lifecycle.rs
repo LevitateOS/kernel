@@ -7,13 +7,13 @@
 //! TEAM_414: Helper function extraction.
 //! TEAM_417: Extracted from process.rs.
 
-use los_mm::user as mm_user;
 use crate::SyscallResult;
+use los_mm::user as mm_user;
 // TEAM_420: Direct linux_raw_sys imports, no shims
 // TEAM_422: Removed ELOOP, ENOENT - not directly used after hook refactor
 use linux_raw_sys::errno::{ECHILD, EFAULT, EINVAL, ENOSYS};
-use los_sched::fd_table::FdTable;
 use los_hal::IrqSafeLock;
+use los_sched::fd_table::FdTable;
 
 // ============================================================================
 // TEAM_414: Process Syscall Helpers
@@ -182,7 +182,10 @@ pub fn sys_spawn(path_ptr: usize, path_len: usize) -> SyscallResult {
         return Err(ENOSYS);
     }
 
-    type SpawnHook = fn(&[u8], IrqSafeLock<FdTable>) -> Result<los_sched::user::UserTask, los_sched::process::SpawnError>;
+    type SpawnHook = fn(
+        &[u8],
+        IrqSafeLock<FdTable>,
+    ) -> Result<los_sched::user::UserTask, los_sched::process::SpawnError>;
     let hook: SpawnHook = unsafe { core::mem::transmute(hook_ptr) };
 
     match hook(&elf_data, new_fd_table) {
@@ -232,7 +235,12 @@ const MAX_ARG_LEN: usize = 256;
 
 /// TEAM_186: sys_spawn_args - Spawn a new process with arguments.
 /// TEAM_414: Refactored to use helper functions.
-pub fn sys_spawn_args(path_ptr: usize, path_len: usize, argv_ptr: usize, argc: usize) -> SyscallResult {
+pub fn sys_spawn_args(
+    path_ptr: usize,
+    path_len: usize,
+    argv_ptr: usize,
+    argc: usize,
+) -> SyscallResult {
     // 1. Validate argc
     if argc > MAX_ARGC {
         return Err(EINVAL);
@@ -242,8 +250,8 @@ pub fn sys_spawn_args(path_ptr: usize, path_len: usize, argv_ptr: usize, argc: u
     let path_len = path_len.min(256);
     let task = los_sched::current_task();
     let mut path_buf = [0u8; 256];
-    let path = crate::copy_user_string(task.ttbr0, path_ptr, path_len, &mut path_buf)
-        .map_err(|e| {
+    let path =
+        crate::copy_user_string(task.ttbr0, path_ptr, path_len, &mut path_buf).map_err(|e| {
             log::debug!("[SYSCALL] spawn_args: Invalid path: errno={}", e);
             e
         })?;
@@ -307,7 +315,13 @@ pub fn sys_spawn_args(path_ptr: usize, path_len: usize, argv_ptr: usize, argc: u
         return Err(ENOSYS);
     }
 
-    type SpawnArgsHook = fn(&[u8], &[&str], &[&str], IrqSafeLock<FdTable>) -> Result<los_sched::user::UserTask, los_sched::process::SpawnError>;
+    type SpawnArgsHook = fn(
+        &[u8],
+        &[&str],
+        &[&str],
+        IrqSafeLock<FdTable>,
+    )
+        -> Result<los_sched::user::UserTask, los_sched::process::SpawnError>;
     let hook: SpawnArgsHook = unsafe { core::mem::transmute(hook_ptr) };
 
     match hook(&elf_data, &arg_refs, &[], new_fd_table) {

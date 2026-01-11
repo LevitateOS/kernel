@@ -164,10 +164,10 @@ pub trait FileOps: Send + Sync {
     /// Seek to a new position
     fn seek(&self, file: &File, offset: i64, whence: SeekWhence) -> VfsResult<u64> {
         use core::sync::atomic::Ordering;
-        
+
         let current = file.offset.load(Ordering::Relaxed);
         let size = file.inode.size.load(Ordering::Relaxed);
-        
+
         let new_offset = match whence {
             SeekWhence::Set => {
                 if offset < 0 {
@@ -177,10 +177,12 @@ pub trait FileOps: Send + Sync {
             }
             SeekWhence::Cur => {
                 if offset < 0 {
-                    current.checked_sub((-offset) as u64)
+                    current
+                        .checked_sub((-offset) as u64)
                         .ok_or(VfsError::InvalidArgument)?
                 } else {
-                    current.checked_add(offset as u64)
+                    current
+                        .checked_add(offset as u64)
                         .ok_or(VfsError::InvalidArgument)?
                 }
             }
@@ -194,7 +196,7 @@ pub trait FileOps: Send + Sync {
                 }
             }
         };
-        
+
         file.offset.store(new_offset, Ordering::Relaxed);
         Ok(new_offset)
     }

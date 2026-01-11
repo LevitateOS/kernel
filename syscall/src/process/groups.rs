@@ -5,8 +5,8 @@
 
 use crate::SyscallResult;
 // TEAM_420: Direct linux_raw_sys imports, no shims
-use linux_raw_sys::errno::{EPERM, ESRCH};
 use core::sync::atomic::Ordering;
+use linux_raw_sys::errno::{EPERM, ESRCH};
 
 /// TEAM_394: sys_setpgid - Set process group ID.
 ///
@@ -21,18 +21,10 @@ pub fn sys_setpgid(pid: i32, pgid: i32) -> SyscallResult {
     let current_pid = task.id.0;
 
     // pid 0 means current process
-    let target_pid = if pid == 0 {
-        current_pid
-    } else {
-        pid as usize
-    };
+    let target_pid = if pid == 0 { current_pid } else { pid as usize };
 
     // pgid 0 means use target pid as pgid
-    let new_pgid = if pgid == 0 {
-        target_pid
-    } else {
-        pgid as usize
-    };
+    let new_pgid = if pgid == 0 { target_pid } else { pgid as usize };
 
     // For simplicity, only allow setting own process group
     if target_pid != current_pid {
@@ -57,11 +49,7 @@ pub fn sys_getpgid(pid: i32) -> SyscallResult {
     let task = los_sched::current_task();
     let current_pid = task.id.0;
 
-    let target_pid = if pid == 0 {
-        current_pid
-    } else {
-        pid as usize
-    };
+    let target_pid = if pid == 0 { current_pid } else { pid as usize };
 
     // For simplicity, only support querying own pgid
     if target_pid != current_pid {

@@ -5,7 +5,7 @@
 use alloc::vec::Vec;
 
 use crate::FRAME_ALLOCATOR;
-use los_hal::mmu::{self, MmuError, PageTable, ENTRIES_PER_TABLE};
+use los_hal::mmu::{self, ENTRIES_PER_TABLE, MmuError, PageTable};
 use los_hal::traits::PageAllocator;
 
 /// TEAM_073: Create a new user page table.
@@ -144,8 +144,8 @@ pub unsafe fn destroy_user_page_table(ttbr0_phys: usize) -> Result<(), MmuError>
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::mapping::map_user_page;
+    use super::*;
     use los_hal::mmu::PageFlags;
 
     /// TEAM_238: Test that destroy_user_page_table properly cleans up.

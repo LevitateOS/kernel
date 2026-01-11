@@ -28,15 +28,21 @@ jobs:
         run: cargo fmt --check
 
       - name: Clippy
-        run: cargo clippy --target x86_64-unknown-none -- -D warnings
+        run: cargo clippy --target x86_64-unknown-none --workspace --exclude los_arch_aarch64
 
       - name: Build kernel
-        run: cargo build --release --target x86_64-unknown-none
+        run: cargo build --release --target x86_64-unknown-none -p levitate-kernel
 
   build-aarch64:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # TEAM_425: Required for linking aarch64 binaries on x86_64 runners
+      - name: Install aarch64 cross-compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@nightly
@@ -50,14 +56,66 @@ jobs:
           key: aarch64
 
       - name: Clippy
-        run: cargo clippy --target aarch64-unknown-none -- -D warnings
+        run: cargo clippy --target aarch64-unknown-none --workspace --exclude los_arch_x86_64
 
       - name: Build kernel
-        run: cargo build --release --target aarch64-unknown-none
+        run: cargo build --release --target aarch64-unknown-none -p levitate-kernel
+
+  # Host-side unit tests (run on Ubuntu, not in kernel)
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src
+
+      - name: Rust Cache
+        uses: swatinem/rust-cache@v2
+        with:
+          key: unit-tests
+
+      # Core library tests
+      - name: Test los_hal
+        run: cargo test -p los_hal --features std
+
+      - name: Test los_utils
+        run: cargo test -p los_utils --features std
+
+      - name: Test los_error
+        run: cargo test -p los_error
+
+      # Trait crates tests
+      - name: Test input-device trait
+        run: cargo test -p input-device --features std
+
+      - name: Test network-device trait
+        run: cargo test -p network-device --features std
+
+      - name: Test storage-device trait
+        run: cargo test -p storage-device --features std
+
+      # Driver tests
+      - name: Test virtio-transport
+        run: cargo test -p virtio-transport --features std
+
+      - name: Test virtio-blk
+        run: cargo test -p virtio-blk --features std
+
+      - name: Test virtio-input
+        run: cargo test -p virtio-input --features std
+
+      - name: Test virtio-net
+        run: cargo test -p virtio-net --features std
+
+      - name: Test pci
+        run: cargo test -p los_pci --features std
 
   # Update 'tested' branch on successful master builds
   update-tested-branch:
-    needs: [build-x86_64, build-aarch64]
+    needs: [build-x86_64, build-aarch64, unit-tests]
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:

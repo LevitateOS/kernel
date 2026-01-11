@@ -66,8 +66,8 @@ pub mod layout {
     pub const USER_HEAP_MAX_SIZE: usize = 256 * 1024 * 1024;
 }
 
-use los_mm::heap::ProcessHeap;
 use crate::fd_table::SharedFdTable;
+use los_mm::heap::ProcessHeap;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

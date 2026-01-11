@@ -22,10 +22,9 @@ pub mod types; // TEAM_418: SSOT for common syscall types (Timeval, Timespec)
 // TEAM_413: Re-export commonly used helpers
 // TEAM_415: Added ioctl helpers
 pub use helpers::{
-    get_fd, get_vfs_file, is_valid_fd, read_struct_from_user, read_user_path, resolve_at_path,
-    write_struct_to_user, SyscallResultExt, UserPtr, UserSlice,
-    ioctl_get_termios, ioctl_read_termios, ioctl_write_i32, ioctl_read_i32,
-    ioctl_write_u32, ioctl_read_u32,
+    SyscallResultExt, UserPtr, UserSlice, get_fd, get_vfs_file, ioctl_get_termios, ioctl_read_i32,
+    ioctl_read_termios, ioctl_read_u32, ioctl_write_i32, ioctl_write_u32, is_valid_fd,
+    read_struct_from_user, read_user_path, resolve_at_path, write_struct_to_user,
 };
 
 // TEAM_422: Architecture-specific imports
@@ -37,7 +36,7 @@ pub use los_arch_x86_64::{SyscallFrame, SyscallNumber, is_svc_exception};
 // TEAM_422: Use los_types::Stat as the canonical Stat type (same layout on all archs)
 pub use los_types::Stat;
 // TEAM_418: Re-export time types from SSOT module
-pub use types::{Timeval, Timespec};
+pub use types::{Timespec, Timeval};
 
 // TEAM_420: No shims - use linux_raw_sys directly at callsites
 // TEAM_421: Syscall result type - single conversion point for errors
@@ -102,28 +101,22 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
             frame.arg2() as usize,
             frame.arg3() as i64,
         ),
-        Some(SyscallNumber::Dup2) => fs::sys_dup2(
-            frame.arg0() as usize,
-            frame.arg1() as usize,
-        ),
-        Some(SyscallNumber::Ftruncate) => fs::sys_ftruncate(
-            frame.arg0() as usize,
-            frame.arg1() as i64,
-        ),
+        Some(SyscallNumber::Dup2) => fs::sys_dup2(frame.arg0() as usize, frame.arg1() as usize),
+        Some(SyscallNumber::Ftruncate) => {
+            fs::sys_ftruncate(frame.arg0() as usize, frame.arg1() as i64)
+        }
         Some(SyscallNumber::Chdir) => fs::sys_chdir(frame.arg0() as usize),
         Some(SyscallNumber::Fchdir) => fs::sys_fchdir(frame.arg0() as usize),
         Some(SyscallNumber::Nanosleep) => {
             time::sys_nanosleep(frame.arg0() as u64, frame.arg1() as u64)
         }
         // TEAM_409: Legacy time syscall
-        Some(SyscallNumber::Gettimeofday) => time::sys_gettimeofday(
-            frame.arg0() as usize,
-            frame.arg1() as usize,
-        ),
-        Some(SyscallNumber::ClockGettime) => time::sys_clock_gettime(
-            frame.arg0() as i32,
-            frame.arg1() as usize,
-        ),
+        Some(SyscallNumber::Gettimeofday) => {
+            time::sys_gettimeofday(frame.arg0() as usize, frame.arg1() as usize)
+        }
+        Some(SyscallNumber::ClockGettime) => {
+            time::sys_clock_gettime(frame.arg0() as i32, frame.arg1() as usize)
+        }
         // TEAM_176: Directory listing syscall
         Some(SyscallNumber::Getdents) => fs::sys_getdents(
             frame.arg0() as usize,
@@ -296,10 +289,9 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
         Some(SyscallNumber::Geteuid) => process::sys_geteuid(),
         Some(SyscallNumber::Getgid) => process::sys_getgid(),
         Some(SyscallNumber::Getegid) => process::sys_getegid(),
-        Some(SyscallNumber::ClockGetres) => time::sys_clock_getres(
-            frame.arg0() as i32,
-            frame.arg1() as usize,
-        ),
+        Some(SyscallNumber::ClockGetres) => {
+            time::sys_clock_getres(frame.arg0() as i32, frame.arg1() as usize)
+        }
         Some(SyscallNumber::Madvise) => mm::sys_madvise(
             frame.arg0() as usize,
             frame.arg1() as usize,
@@ -312,10 +304,9 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
         ),
         // TEAM_350: x86_64-only arch_prctl (aarch64 uses TPIDR_EL0 directly)
         #[cfg(target_arch = "x86_64")]
-        Some(SyscallNumber::ArchPrctl) => process::sys_arch_prctl(
-            frame.arg0() as i32,
-            frame.arg1() as usize,
-        ),
+        Some(SyscallNumber::ArchPrctl) => {
+            process::sys_arch_prctl(frame.arg0() as i32, frame.arg1() as usize)
+        }
         Some(SyscallNumber::Faccessat) => fs::sys_faccessat(
             frame.arg0() as i32,
             frame.arg1() as usize,
@@ -342,24 +333,19 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
             frame.arg2() as usize,
             frame.arg3() as usize,
         ),
-        Some(SyscallNumber::Tkill) => signal::sys_tkill(
-            frame.arg0() as i32,
-            frame.arg1() as i32,
-        ),
-        Some(SyscallNumber::PkeyAlloc) => mm::sys_pkey_alloc(
-            frame.arg0() as u32,
-            frame.arg1() as u32,
-        ),
+        Some(SyscallNumber::Tkill) => signal::sys_tkill(frame.arg0() as i32, frame.arg1() as i32),
+        Some(SyscallNumber::PkeyAlloc) => {
+            mm::sys_pkey_alloc(frame.arg0() as u32, frame.arg1() as u32)
+        }
         Some(SyscallNumber::PkeyMprotect) => mm::sys_pkey_mprotect(
             frame.arg0() as usize,
             frame.arg1() as usize,
             frame.arg2() as u32,
             frame.arg3() as i32,
         ),
-        Some(SyscallNumber::Sigaltstack) => signal::sys_sigaltstack(
-            frame.arg0() as usize,
-            frame.arg1() as usize,
-        ),
+        Some(SyscallNumber::Sigaltstack) => {
+            signal::sys_sigaltstack(frame.arg0() as usize, frame.arg1() as usize)
+        }
         // TEAM_394: Epoll syscalls for tokio/brush support
         Some(SyscallNumber::EpollCreate1) => epoll::sys_epoll_create1(frame.arg0() as i32),
         // TEAM_420: op is u32 to match linux-raw-sys types
@@ -375,15 +361,13 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
             frame.arg2() as i32,
             frame.arg3() as i32,
         ),
-        Some(SyscallNumber::Eventfd2) => epoll::sys_eventfd2(
-            frame.arg0() as u32,
-            frame.arg1() as u32,
-        ),
+        Some(SyscallNumber::Eventfd2) => {
+            epoll::sys_eventfd2(frame.arg0() as u32, frame.arg1() as u32)
+        }
         // TEAM_394: Process group syscalls for brush job control
-        Some(SyscallNumber::Setpgid) => process::sys_setpgid(
-            frame.arg0() as i32,
-            frame.arg1() as i32,
-        ),
+        Some(SyscallNumber::Setpgid) => {
+            process::sys_setpgid(frame.arg0() as i32, frame.arg1() as i32)
+        }
         Some(SyscallNumber::Getpgid) => process::sys_getpgid(frame.arg0() as i32),
         #[cfg(target_arch = "x86_64")]
         Some(SyscallNumber::Getpgrp) => process::sys_getpgrp(),
@@ -407,15 +391,13 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
             frame.arg3() as usize,
         ),
         // TEAM_409: getrusage - resource usage statistics
-        Some(SyscallNumber::Getrusage) => process::sys_getrusage(
-            frame.arg0() as i32,
-            frame.arg1() as usize,
-        ),
+        Some(SyscallNumber::Getrusage) => {
+            process::sys_getrusage(frame.arg0() as i32, frame.arg1() as usize)
+        }
         // TEAM_409: truncate - truncate file by path
-        Some(SyscallNumber::Truncate) => fs::sys_truncate(
-            frame.arg0() as usize,
-            frame.arg1() as i64,
-        ),
+        Some(SyscallNumber::Truncate) => {
+            fs::sys_truncate(frame.arg0() as usize, frame.arg1() as i64)
+        }
         None => {
             log::warn!("[SYSCALL] Unknown syscall number: {}", nr);
             Err(linux_raw_sys::errno::ENOSYS)

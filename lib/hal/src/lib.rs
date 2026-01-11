@@ -6,13 +6,13 @@
 
 pub mod allocator;
 pub mod console;
-pub mod traits;
 pub mod interrupts;
-pub mod mmu;
 pub mod memory; // TEAM_051: Frame allocator
+pub mod mmu;
+pub mod traits;
 pub mod virtio;
 
-pub use traits::{InterruptController, MmuInterface, InterruptHandler, IrqId};
+pub use traits::{InterruptController, InterruptHandler, IrqId, MmuInterface};
 
 #[cfg(target_arch = "aarch64")]
 pub mod aarch64;
@@ -25,10 +25,10 @@ pub mod x86_64;
 pub use self::x86_64 as arch;
 
 // Re-export common arch-specific modules to root for backward compatibility
-#[cfg(target_arch = "aarch64")]
-pub use self::arch::{gic, timer, fdt, serial};
 #[cfg(target_arch = "x86_64")]
-pub use self::arch::{apic, pit, vga, idt, exceptions, ioapic, serial};
+pub use self::arch::{apic, exceptions, idt, ioapic, pit, serial, vga};
+#[cfg(target_arch = "aarch64")]
+pub use self::arch::{fdt, gic, serial, timer};
 
 /// Get the active interrupt controller.
 pub fn active_interrupt_controller() -> &'static dyn InterruptController {

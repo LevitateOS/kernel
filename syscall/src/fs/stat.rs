@@ -1,7 +1,7 @@
 use los_vfs::dispatch::*;
 // TEAM_413: Use new syscall helpers
 // TEAM_421: Import SyscallResult
-use crate::{Stat, get_fd, write_struct_to_user, SyscallResult};
+use crate::{Stat, SyscallResult, get_fd, write_struct_to_user};
 use los_sched::fd_table::FdType;
 
 /// TEAM_168: sys_fstat - Get file status.

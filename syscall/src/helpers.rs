@@ -16,13 +16,13 @@ use alloc::format;
 use alloc::string::String;
 use core::marker::PhantomData;
 
-use los_vfs::file::FileRef;
-use los_mm::user as mm_user;
 use crate::read_user_cstring;
-use los_sched::fd_table::{FdEntry, FdType};
-use los_sched::current_task;
 use linux_raw_sys::errno::{EBADF, EFAULT, ENOTDIR};
 use linux_raw_sys::general::AT_FDCWD;
+use los_mm::user as mm_user;
+use los_sched::current_task;
+use los_sched::fd_table::{FdEntry, FdType};
+use los_vfs::file::FileRef;
 
 // ============================================================================
 // TEAM_413: UserPtr - Safe wrapper for user-space pointer access
@@ -60,14 +60,11 @@ impl<T: Copy> UserPtr<T> {
             return Err(EFAULT);
         }
 
-        let src = mm_user::user_va_to_kernel_ptr(self.ttbr0, self.addr)
-            .ok_or(EFAULT)?;
+        let src = mm_user::user_va_to_kernel_ptr(self.ttbr0, self.addr).ok_or(EFAULT)?;
 
         // SAFETY: validate_user_buffer confirmed the memory is mapped and accessible.
         // We read size_of::<T>() bytes which is the exact size needed.
-        let value = unsafe {
-            core::ptr::read_unaligned(src as *const T)
-        };
+        let value = unsafe { core::ptr::read_unaligned(src as *const T) };
 
         Ok(value)
     }
@@ -82,8 +79,7 @@ impl<T: Copy> UserPtr<T> {
             return Err(EFAULT);
         }
 
-        let dest = mm_user::user_va_to_kernel_ptr(self.ttbr0, self.addr)
-            .ok_or(EFAULT)?;
+        let dest = mm_user::user_va_to_kernel_ptr(self.ttbr0, self.addr).ok_or(EFAULT)?;
 
         // SAFETY: validate_user_buffer confirmed the memory is mapped and writable.
         // We write size_of::<T>() bytes which is the exact size needed.
@@ -154,16 +150,11 @@ impl<T: Copy> UserSlice<T> {
             return Err(EFAULT);
         }
 
-        let src = mm_user::user_va_to_kernel_ptr(self.ttbr0, self.addr)
-            .ok_or(EFAULT)?;
+        let src = mm_user::user_va_to_kernel_ptr(self.ttbr0, self.addr).ok_or(EFAULT)?;
 
         // SAFETY: validate_user_buffer confirmed the memory is mapped.
         unsafe {
-            core::ptr::copy_nonoverlapping(
-                src as *const T,
-                buf.as_mut_ptr(),
-                count,
-            );
+            core::ptr::copy_nonoverlapping(src as *const T, buf.as_mut_ptr(), count);
         }
 
         Ok(count)
@@ -184,16 +175,11 @@ impl<T: Copy> UserSlice<T> {
             return Err(EFAULT);
         }
 
-        let dest = mm_user::user_va_to_kernel_ptr(self.ttbr0, self.addr)
-            .ok_or(EFAULT)?;
+        let dest = mm_user::user_va_to_kernel_ptr(self.ttbr0, self.addr).ok_or(EFAULT)?;
 
         // SAFETY: validate_user_buffer confirmed the memory is mapped and writable.
         unsafe {
-            core::ptr::copy_nonoverlapping(
-                buf.as_ptr(),
-                dest as *mut T,
-                count,
-            );
+            core::ptr::copy_nonoverlapping(buf.as_ptr(), dest as *mut T, count);
         }
 
         Ok(count)
@@ -284,17 +270,12 @@ pub fn write_struct_to_user<T: Copy>(ttbr0: usize, user_buf: usize, value: &T) -
         return Err(EFAULT);
     }
 
-    let dest = mm_user::user_va_to_kernel_ptr(ttbr0, user_buf)
-        .ok_or(EFAULT)?;
+    let dest = mm_user::user_va_to_kernel_ptr(ttbr0, user_buf).ok_or(EFAULT)?;
 
     // SAFETY: validate_user_buffer confirmed the memory is mapped and writable.
     // We copy exactly size_of::<T>() bytes.
     unsafe {
-        core::ptr::copy_nonoverlapping(
-            value as *const T as *const u8,
-            dest,
-            size,
-        );
+        core::ptr::copy_nonoverlapping(value as *const T as *const u8, dest, size);
     }
 
     Ok(())
@@ -312,13 +293,10 @@ pub fn read_struct_from_user<T: Copy + Default>(ttbr0: usize, user_buf: usize) -
         return Err(EFAULT);
     }
 
-    let src = mm_user::user_va_to_kernel_ptr(ttbr0, user_buf)
-        .ok_or(EFAULT)?;
+    let src = mm_user::user_va_to_kernel_ptr(ttbr0, user_buf).ok_or(EFAULT)?;
 
     // SAFETY: validate_user_buffer confirmed the memory is mapped.
-    let value = unsafe {
-        core::ptr::read_unaligned(src as *const T)
-    };
+    let value = unsafe { core::ptr::read_unaligned(src as *const T) };
 
     Ok(value)
 }
@@ -423,11 +401,17 @@ pub trait SyscallResultExt<T> {
     ///
     /// On success, calls the provided closure to compute the return value.
     /// On error, converts the VfsError to u32 errno.
-    fn to_syscall_result<F: FnOnce(T) -> crate::SyscallResult>(self, on_success: F) -> crate::SyscallResult;
+    fn to_syscall_result<F: FnOnce(T) -> crate::SyscallResult>(
+        self,
+        on_success: F,
+    ) -> crate::SyscallResult;
 }
 
 impl<T> SyscallResultExt<T> for Result<T, los_vfs::error::VfsError> {
-    fn to_syscall_result<F: FnOnce(T) -> crate::SyscallResult>(self, on_success: F) -> crate::SyscallResult {
+    fn to_syscall_result<F: FnOnce(T) -> crate::SyscallResult>(
+        self,
+        on_success: F,
+    ) -> crate::SyscallResult {
         match self {
             Ok(v) => on_success(v),
             Err(e) => Err(e.to_errno()),
@@ -440,11 +424,11 @@ impl<T> SyscallResultExt<T> for Result<T, los_vfs::error::VfsError> {
 // TEAM_421: Updated to return SyscallResult and Result<T, u32>
 // ============================================================================
 
-#[cfg(target_arch = "x86_64")]
-use los_arch_x86_64::Termios;
+use crate::SyscallResult;
 #[cfg(target_arch = "aarch64")]
 use los_arch_aarch64::Termios;
-use crate::SyscallResult;
+#[cfg(target_arch = "x86_64")]
+use los_arch_x86_64::Termios;
 
 /// TEAM_415: Write a termios struct to user space.
 /// TEAM_421: Returns SyscallResult

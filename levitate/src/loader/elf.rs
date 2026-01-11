@@ -8,8 +8,8 @@
 //! - Program Header: 56 bytes each
 //! - AArch64 Machine Type: EM_AARCH64 = 183
 
-use los_mm::user as mm_user;
 use los_hal::mmu::{self, PAGE_SIZE, PageFlags};
+use los_mm::user as mm_user;
 
 /// ELF Magic Number: 0x7F 'E' 'L' 'F'
 pub const ELF_MAGIC: [u8; 4] = [0x7F, b'E', b'L', b'F'];
@@ -319,9 +319,9 @@ impl<'a> Elf<'a> {
     /// - ET_DYN: 0x10000 (fixed base for PIE, above null page)
     pub fn load_base(&self) -> usize {
         if self.is_pie() {
-            0x10000  // 64KB, above null page
+            0x10000 // 64KB, above null page
         } else {
-            0  // ET_EXEC uses absolute addresses
+            0 // ET_EXEC uses absolute addresses
         }
     }
 
@@ -338,8 +338,8 @@ impl<'a> Elf<'a> {
                 // Read using read_unaligned for safety
                 // SAFETY: The offset and size are validated against the data length.
                 // We use read_unaligned because the program header might not be aligned.
-                let phdr = unsafe { 
-                    core::ptr::read_unaligned(data.as_ptr().add(offset) as *const Elf64ProgramHeader) 
+                let phdr = unsafe {
+                    core::ptr::read_unaligned(data.as_ptr().add(offset) as *const Elf64ProgramHeader)
                 };
                 Some(phdr)
             } else {
@@ -488,21 +488,19 @@ impl<'a> Elf<'a> {
                         let dst = mmu::phys_to_virt(dst_phys) as *mut u8;
 
                         if i == 0 {
-                            log::trace!(
-                                "[ELF] Resolved PA [MASKED] -> Kernel VA [MASKED]"
-                            );
+                            log::trace!("[ELF] Resolved PA [MASKED] -> Kernel VA [MASKED]");
                         }
 
-                            /*
-                            if dst_va == 0x11fb8 {
-                                log::warn!("[ELF] WRITING GOT ENTRY at {:x}: val={:x}", dst_va, *byte);
-                            }
-                            */
-                            // SAFETY: dst is a valid pointer within a mapped page
-                            // in the user address space.
-                            unsafe {
-                                *dst = *byte;
-                            }
+                        /*
+                        if dst_va == 0x11fb8 {
+                            log::warn!("[ELF] WRITING GOT ENTRY at {:x}: val={:x}", dst_va, *byte);
+                        }
+                        */
+                        // SAFETY: dst is a valid pointer within a mapped page
+                        // in the user address space.
+                        unsafe {
+                            *dst = *byte;
+                        }
                     }
                 }
             }
@@ -517,7 +515,10 @@ impl<'a> Elf<'a> {
         // The kernel just needs to load segments and jump to entry point
         // TODO(TEAM_354): Add kernel relocation support for PIE binaries without self-relocation
         if self.is_pie() {
-            log::debug!("[ELF] PIE binary loaded at base 0x{:x}, self-relocating", load_base);
+            log::debug!(
+                "[ELF] PIE binary loaded at base 0x{:x}, self-relocating",
+                load_base
+            );
         }
 
         // TEAM_354: Return adjusted entry point

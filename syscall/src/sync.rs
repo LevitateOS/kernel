@@ -13,20 +13,20 @@ use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU32, Ordering};
 use los_hal::IrqSafeLock;
 
-use los_mm::user as mm_user;
 use crate::SyscallResult;
-use crate::epoll::EventFdState; // TEAM_422: Import for downcasting
+use crate::epoll::EventFdState;
+use los_mm::user as mm_user; // TEAM_422: Import for downcasting
 // TEAM_420: Direct linux_raw_sys imports, no shims
 use linux_raw_sys::errno::{EAGAIN, EFAULT, EINVAL};
 use los_sched::scheduler::SCHEDULER;
 use los_sched::{TaskControlBlock, TaskState, current_task, yield_now};
 
 // TEAM_360: Poll event constants (matching Linux)
-pub const POLLIN: i16 = 0x0001;   // Data to read
-pub const POLLPRI: i16 = 0x0002;  // Urgent data
-pub const POLLOUT: i16 = 0x0004;  // Writing possible
-pub const POLLERR: i16 = 0x0008;  // Error (output only)
-pub const POLLHUP: i16 = 0x0010;  // Hang up (output only)
+pub const POLLIN: i16 = 0x0001; // Data to read
+pub const POLLPRI: i16 = 0x0002; // Urgent data
+pub const POLLOUT: i16 = 0x0004; // Writing possible
+pub const POLLERR: i16 = 0x0008; // Error (output only)
+pub const POLLHUP: i16 = 0x0010; // Hang up (output only)
 pub const POLLNVAL: i16 = 0x0020; // Invalid fd (output only)
 
 /// TEAM_360: struct pollfd (8 bytes)
@@ -65,7 +65,13 @@ static FUTEX_WAITERS: IrqSafeLock<BTreeMap<usize, Vec<FutexWaiter>>> =
 /// # Returns
 /// - FUTEX_WAIT: Ok(0) on success, Err(EAGAIN) if value mismatch, Err(EFAULT) if bad address
 /// - FUTEX_WAKE: Ok(number of tasks woken)
-pub fn sys_futex(addr: usize, op: usize, val: usize, _timeout: usize, _addr2: usize) -> SyscallResult {
+pub fn sys_futex(
+    addr: usize,
+    op: usize,
+    val: usize,
+    _timeout: usize,
+    _addr2: usize,
+) -> SyscallResult {
     match op {
         FUTEX_WAIT => futex_wait(addr, val as u32),
         FUTEX_WAKE => futex_wake(addr, val),
@@ -159,7 +165,12 @@ pub fn futex_wake(addr: usize, count: usize) -> SyscallResult {
 ///
 /// # Returns
 /// Ok(number of fds with events), Ok(0) on timeout, or Err(errno)
-pub fn sys_ppoll(fds_ptr: usize, nfds: usize, _tmo_ptr: usize, _sigmask_ptr: usize) -> SyscallResult {
+pub fn sys_ppoll(
+    fds_ptr: usize,
+    nfds: usize,
+    _tmo_ptr: usize,
+    _sigmask_ptr: usize,
+) -> SyscallResult {
     let task = current_task();
     let ttbr0 = task.ttbr0;
 
@@ -202,9 +213,7 @@ pub fn sys_ppoll(fds_ptr: usize, nfds: usize, _tmo_ptr: usize, _sigmask_ptr: usi
                     // Invalid fd
                     POLLNVAL
                 }
-                Some(entry) => {
-                    poll_fd_type(&entry.fd_type, pfd.events)
-                }
+                Some(entry) => poll_fd_type(&entry.fd_type, pfd.events),
             }
         };
 
@@ -218,11 +227,7 @@ pub fn sys_ppoll(fds_ptr: usize, nfds: usize, _tmo_ptr: usize, _sigmask_ptr: usi
         }
     }
 
-    log::trace!(
-        "[SYSCALL] ppoll(nfds={}) -> {} ready",
-        nfds,
-        ready_count
-    );
+    log::trace!("[SYSCALL] ppoll(nfds={}) -> {} ready", nfds, ready_count);
 
     Ok(ready_count)
 }

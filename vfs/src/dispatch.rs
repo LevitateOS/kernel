@@ -12,7 +12,7 @@ use super::dentry::{Dentry, dcache};
 use super::error::{VfsError, VfsResult};
 use super::file::{File, FileRef, OpenFlags};
 use super::ops::{DirEntry, SetAttr};
-use los_types::{Stat, S_IFDIR, S_IFREG};
+use los_types::{S_IFDIR, S_IFREG, Stat};
 
 /// TEAM_202: Open a file by path
 ///
@@ -326,7 +326,9 @@ pub fn vfs_link(old_path: &str, new_path: &str) -> VfsResult<()> {
     }
 
     // Create the hard link in the filesystem
-    new_parent_inode.ops.link(&new_parent_inode, new_name, &old_inode)?;
+    new_parent_inode
+        .ops
+        .link(&new_parent_inode, new_name, &old_inode)?;
 
     // Add to dentry cache
     let new_dentry = Arc::new(Dentry::new(

@@ -40,8 +40,11 @@ pub unsafe fn parse(dtb_ptr: usize) -> BootInfo {
         // Try to find initramfs
         if let Ok((start, end)) = fdt::get_initrd_range(dtb_slice) {
             if end > start {
-                boot_info.initramfs =
-                    Some(MemoryRegion::new(start, end - start, MemoryKind::Bootloader));
+                boot_info.initramfs = Some(MemoryRegion::new(
+                    start,
+                    end - start,
+                    MemoryKind::Bootloader,
+                ));
             }
         }
     }
@@ -70,8 +73,11 @@ pub fn parse_from_slice(dtb_slice: &[u8], dtb_phys: usize) -> BootInfo {
         // Try to find initramfs
         if let Ok((start, end)) = fdt::get_initrd_range(dtb_slice) {
             if end > start {
-                boot_info.initramfs =
-                    Some(MemoryRegion::new(start, end - start, MemoryKind::Bootloader));
+                boot_info.initramfs = Some(MemoryRegion::new(
+                    start,
+                    end - start,
+                    MemoryKind::Bootloader,
+                ));
             }
         }
     }

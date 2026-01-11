@@ -128,7 +128,8 @@ impl<'a> CpioArchive<'a> {
             // Root directory: entries without '/' or with single component
             if normalized.is_empty() {
                 // Entry is in root if it has no '/' or only trailing '/'
-                !name.contains('/') || (name.ends_with('/') && !name[..name.len()-1].contains('/'))
+                !name.contains('/')
+                    || (name.ends_with('/') && !name[..name.len() - 1].contains('/'))
             } else {
                 // Entry must start with prefix and have no additional '/' after
                 if !name.starts_with(&normalized) {
@@ -158,14 +159,13 @@ impl<'a> CpioArchive<'a> {
     }
 
     /// TEAM_176: Normalize directory path for prefix matching.
+    /// Returns path with leading '/' removed. Caller adds '/' suffix when needed.
     fn normalize_dir_path(path: &str) -> &str {
         let path = path.trim_start_matches('/');
         if path.is_empty() || path == "." {
             ""
-        } else if path.ends_with('/') {
-            path
         } else {
-            path // Caller will add '/' when needed
+            path
         }
     }
 }

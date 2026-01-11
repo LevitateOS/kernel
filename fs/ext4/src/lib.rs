@@ -81,7 +81,10 @@ pub struct Ext4BlockDevice<B: BlockDeviceOps> {
 
 impl<B: BlockDeviceOps> Ext4BlockDevice<B> {
     pub fn new(size_bytes: u64, block_ops: B) -> Self {
-        Self { size_bytes, block_ops }
+        Self {
+            size_bytes,
+            block_ops,
+        }
     }
 }
 
@@ -105,7 +108,8 @@ impl<B: BlockDeviceOps> Ext4Read for Ext4BlockDevice<B> {
 
         while remaining > 0 {
             // TEAM_150: Propagate block errors instead of panicking
-            self.block_ops.read_block(current_block as usize, &mut buf)
+            self.block_ops
+                .read_block(current_block as usize, &mut buf)
                 .map_err(|e| Box::new(e) as Box<dyn core::error::Error + Send + Sync>)?;
 
             let bytes_to_copy = (512 - block_offset).min(remaining);

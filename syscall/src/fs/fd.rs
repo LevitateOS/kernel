@@ -11,16 +11,15 @@ use los_fs_tty::pty::PtyPair;
 // TEAM_420: Direct linux_raw_sys import, no shims
 // TEAM_421: Import SyscallResult
 use crate::{
-    get_fd, is_valid_fd,
-    ioctl_get_termios, ioctl_read_termios, ioctl_write_i32, ioctl_read_i32,
-    ioctl_write_u32, ioctl_read_u32,
-    SyscallResult,
+    SyscallResult, get_fd, ioctl_get_termios, ioctl_read_i32, ioctl_read_termios, ioctl_read_u32,
+    ioctl_write_i32, ioctl_write_u32, is_valid_fd,
+};
+use linux_raw_sys::errno::{
+    EBADF, EFAULT, EFBIG, EINVAL, EIO, EISDIR, EMFILE, ENOENT, ENOSPC, ENOSYS, ENOTTY, EROFS,
+    ESPIPE,
 };
 use los_sched::current_task;
 use los_sched::fd_table::FdType;
-use linux_raw_sys::errno::{
-    EBADF, EFAULT, EFBIG, EINVAL, EIO, EISDIR, EMFILE, ENOENT, ENOSPC, ENOSYS, ENOTTY, EROFS, ESPIPE,
-};
 
 // TEAM_404: lseek whence constants
 const SEEK_SET: i32 = 0;
@@ -91,7 +90,12 @@ pub fn sys_fcntl(fd: i32, cmd: i32, arg: usize) -> SyscallResult {
             Ok(65536)
         }
         _ => {
-            log::warn!("[SYSCALL] fcntl({}, {}, {}) - unsupported cmd", fd, cmd, arg);
+            log::warn!(
+                "[SYSCALL] fcntl({}, {}, {}) - unsupported cmd",
+                fd,
+                cmd,
+                arg
+            );
             Err(EINVAL)
         }
     }
@@ -138,9 +142,9 @@ pub fn sys_dup3(oldfd: usize, newfd: usize, _flags: u32) -> SyscallResult {
 ///
 /// Returns 0 on success, EFAULT/EMFILE on failure.
 pub fn sys_pipe2(pipefd_ptr: usize, _flags: u32) -> SyscallResult {
-    use los_vfs::pipe::Pipe;
     use los_mm::user as mm_user;
     use los_sched::fd_table::FdType;
+    use los_vfs::pipe::Pipe;
 
     let task = current_task();
 
@@ -216,10 +220,10 @@ pub fn sys_isatty(fd: i32) -> SyscallResult {
 /// Returns 0 on success, errno on failure.
 pub fn sys_ioctl(fd: usize, request: u64, arg: usize) -> SyscallResult {
     // TEAM_422: Use ioctl constants from arch crate (u64 to match request type)
-    #[cfg(target_arch = "x86_64")]
-    use los_arch_x86_64::{TCGETS, TCSETS, TCSETSF, TCSETSW, TIOCGPTN, TIOCSPTLCK};
     #[cfg(target_arch = "aarch64")]
     use los_arch_aarch64::{TCGETS, TCSETS, TCSETSF, TCSETSW, TIOCGPTN, TIOCSPTLCK};
+    #[cfg(target_arch = "x86_64")]
+    use los_arch_x86_64::{TCGETS, TCSETS, TCSETSF, TCSETSW, TIOCGPTN, TIOCSPTLCK};
     use los_fs_tty::CONSOLE_TTY;
 
     // TEAM_413: Use get_fd helper
@@ -271,7 +275,7 @@ pub fn sys_ioctl(fd: usize, request: u64, arg: usize) -> SyscallResult {
                 },
                 _ => Err(EINVAL),
             }
-        },
+        }
         FdType::PtySlave(pair_any) => {
             // TEAM_422: Downcast Arc<dyn Any> to PtyPair
             let pair = match pair_any.downcast_ref::<PtyPair>() {
@@ -292,7 +296,7 @@ pub fn sys_ioctl(fd: usize, request: u64, arg: usize) -> SyscallResult {
                 },
                 _ => Err(EINVAL),
             }
-        },
+        }
         _ => Err(ENOTTY),
     }
 }
@@ -407,7 +411,11 @@ pub fn sys_truncate(pathname: usize, length: i64) -> SyscallResult {
 
     // Must be a regular file
     if !inode.is_file() {
-        return if inode.is_dir() { Err(EISDIR) } else { Err(EINVAL) };
+        return if inode.is_dir() {
+            Err(EISDIR)
+        } else {
+            Err(EINVAL)
+        };
     }
 
     // TEAM_410: Call the VFS truncate operation
@@ -447,7 +455,11 @@ pub fn sys_ftruncate(fd: usize, length: i64) -> SyscallResult {
 
             // Must be a regular file
             if !file.inode.is_file() {
-                return if file.inode.is_dir() { Err(EISDIR) } else { Err(EINVAL) };
+                return if file.inode.is_dir() {
+                    Err(EISDIR)
+                } else {
+                    Err(EINVAL)
+                };
             }
 
             match file.inode.truncate(length as u64) {
@@ -653,6 +665,12 @@ pub fn sys_fchmodat(_dirfd: i32, pathname: usize, _mode: u32, _flags: i32) -> Sy
 
 /// TEAM_406: sys_fchownat - No-op for single-user OS.
 /// TEAM_421: Updated to return SyscallResult.
-pub fn sys_fchownat(_dirfd: i32, pathname: usize, _owner: u32, _group: u32, _flags: i32) -> SyscallResult {
+pub fn sys_fchownat(
+    _dirfd: i32,
+    pathname: usize,
+    _owner: u32,
+    _group: u32,
+    _flags: i32,
+) -> SyscallResult {
     validate_user_pathname(pathname)
 }

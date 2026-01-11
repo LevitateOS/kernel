@@ -11,7 +11,11 @@ use super::layout;
 /// TEAM_415: Allocate, zero, and map a single page.
 ///
 /// Common pattern used by setup_user_stack, setup_user_tls, and alloc_and_map_heap_page.
-pub fn alloc_zero_map_page(ttbr0_phys: usize, user_va: usize, flags: PageFlags) -> Result<(), MmuError> {
+pub fn alloc_zero_map_page(
+    ttbr0_phys: usize,
+    user_va: usize,
+    flags: PageFlags,
+) -> Result<(), MmuError> {
     // Allocate physical page
     let phys = FRAME_ALLOCATOR
         .alloc_page()
@@ -20,7 +24,9 @@ pub fn alloc_zero_map_page(ttbr0_phys: usize, user_va: usize, flags: PageFlags) 
     // Zero the page for security
     let page_ptr = mmu::phys_to_virt(phys) as *mut u8;
     // SAFETY: phys was just allocated and is valid
-    unsafe { core::ptr::write_bytes(page_ptr, 0, PAGE_SIZE); }
+    unsafe {
+        core::ptr::write_bytes(page_ptr, 0, PAGE_SIZE);
+    }
 
     // Map into user address space
     // SAFETY: caller ensures ttbr0_phys and user_va are valid

@@ -27,7 +27,8 @@ impl SlabAllocator {
     /// Initializes 6 caches.
     pub const fn new() -> Self {
         Self {
-            caches: [ // [SA1] 6 caches initialized
+            caches: [
+                // [SA1] 6 caches initialized
                 SlabCache::new(0),
                 SlabCache::new(1),
                 SlabCache::new(2),
@@ -85,14 +86,14 @@ impl SlabAllocator {
     /// Returns None for size 0 or size > 2048.
     fn size_to_class(size: usize) -> Option<usize> {
         match size {
-            0 => None,           // [SA3] invalid size
-            1..=64 => Some(0),   // [SA2] maps correctly
+            0 => None,         // [SA3] invalid size
+            1..=64 => Some(0), // [SA2] maps correctly
             65..=128 => Some(1),
             129..=256 => Some(2),
             257..=512 => Some(3),
             513..=1024 => Some(4),
             1025..=2048 => Some(5),
-            _ => None,           // [SA4] size > 2048
+            _ => None, // [SA4] size > 2048
         }
     }
 }

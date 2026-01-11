@@ -104,14 +104,14 @@ pub enum SyscallNumber {
     // TEAM_406: System identification and permissions
     Uname = 160,
     Umask = 166,
-    Chmod = 1090,   // TEAM_406: Not in aarch64 Linux, use custom
-    Fchmod = 52,    // aarch64 fchmod
-    Chown = 1092,   // TEAM_406: Not in aarch64 Linux, use custom  
-    Fchown = 55,    // aarch64 fchown
+    Chmod = 1090, // TEAM_406: Not in aarch64 Linux, use custom
+    Fchmod = 52,  // aarch64 fchmod
+    Chown = 1092, // TEAM_406: Not in aarch64 Linux, use custom
+    Fchown = 55,  // aarch64 fchown
     // TEAM_409: Additional syscalls for coreutils
-    Fstatat = 79,    // newfstatat - stat relative to dirfd
-    Truncate = 76,   // truncate file by path
-    Prlimit64 = 261, // get/set resource limits
+    Fstatat = 79,        // newfstatat - stat relative to dirfd
+    Truncate = 76,       // truncate file by path
+    Prlimit64 = 261,     // get/set resource limits
     Gettimeofday = 1094, // TEAM_409: Legacy time (not standard aarch64, custom number)
     Getrusage = 165,     // TEAM_409: Resource usage (standard aarch64)
 
@@ -193,7 +193,7 @@ impl SyscallNumber {
             48 => Some(Self::Faccessat),
             291 => Some(Self::Statx),
             // TEAM_360: Eyra syscalls
-            1007 => Some(Self::Poll),  // TEAM_406
+            1007 => Some(Self::Poll), // TEAM_406
             73 => Some(Self::Ppoll),
             130 => Some(Self::Tkill),
             289 => Some(Self::PkeyAlloc),

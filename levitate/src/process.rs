@@ -12,8 +12,8 @@ use crate::task::user::UserTask;
 use los_error::define_kernel_error;
 use los_hal::mmu::MmuError;
 use los_mm::user::{
-    create_user_page_table, setup_stack_args, setup_user_stack, setup_user_tls,
-    AuxEntry, AT_BASE, AT_ENTRY, AT_PHDR, AT_PHENT, AT_PHNUM,
+    AT_BASE, AT_ENTRY, AT_PHDR, AT_PHENT, AT_PHNUM, AuxEntry, create_user_page_table,
+    setup_stack_args, setup_user_stack, setup_user_tls,
 };
 
 /// Number of stack pages to allocate (512KB)
@@ -61,8 +61,8 @@ pub fn spawn_from_elf(elf_data: &[u8], fd_table: SharedFdTable) -> Result<UserTa
 
     // 4. Set up user stack
     // SAFETY: ttbr0_phys is a valid page table created above
-    let stack_top = unsafe { setup_user_stack(ttbr0_phys, USER_STACK_PAGES) }
-        .map_err(SpawnError::Stack)?;
+    let stack_top =
+        unsafe { setup_user_stack(ttbr0_phys, USER_STACK_PAGES) }.map_err(SpawnError::Stack)?;
 
     // 5. Build auxiliary vector for the runtime
     let auxv = [
@@ -91,15 +91,22 @@ pub fn spawn_from_elf(elf_data: &[u8], fd_table: SharedFdTable) -> Result<UserTa
     // 6. Set up stack arguments (for now, minimal args)
     let args: [&str; 1] = ["init"];
     let envs: [&str; 0] = [];
-    let user_sp = setup_stack_args(ttbr0_phys, stack_top, &args, &envs, &auxv)
-        .map_err(SpawnError::Stack)?;
+    let user_sp =
+        setup_stack_args(ttbr0_phys, stack_top, &args, &envs, &auxv).map_err(SpawnError::Stack)?;
 
     // 7. Set up TLS area
     // SAFETY: ttbr0_phys is a valid page table
     let tls_base = unsafe { setup_user_tls(ttbr0_phys) }.map_err(SpawnError::Tls)?;
 
     // 8. Create UserTask
-    let user_task = UserTask::new(entry_point, user_sp, ttbr0_phys, initial_brk, fd_table, tls_base);
+    let user_task = UserTask::new(
+        entry_point,
+        user_sp,
+        ttbr0_phys,
+        initial_brk,
+        fd_table,
+        tls_base,
+    );
 
     log::info!(
         "[SPAWN] Created process PID={} entry=0x{:x} sp=0x{:x} brk=0x{:x}",

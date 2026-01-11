@@ -1,9 +1,9 @@
+use los_mm::user as mm_user;
 use los_vfs::dispatch::*;
 use los_vfs::error::VfsError;
-use los_mm::user as mm_user;
 // TEAM_420: Direct linux_raw_sys imports, no shims
 // TEAM_421: Import SyscallResult
-use crate::{read_user_cstring, write_to_user_buf, SyscallResult};
+use crate::{SyscallResult, read_user_cstring, write_to_user_buf};
 use linux_raw_sys::errno::{EBADF, EEXIST, EFAULT, EINVAL, EIO, ENOENT, ENOTDIR};
 use linux_raw_sys::general::AT_FDCWD;
 
@@ -42,9 +42,7 @@ pub fn sys_utimensat(dirfd: i32, pathname: usize, times: usize, _flags: u32) -> 
         for i in 0..4 {
             let mut val = 0u64;
             for j in 0..8 {
-                if let Some(ptr) =
-                    mm_user::user_va_to_kernel_ptr(task.ttbr0, times + i * 8 + j)
-                {
+                if let Some(ptr) = mm_user::user_va_to_kernel_ptr(task.ttbr0, times + i * 8 + j) {
                     val |= (unsafe { *ptr } as u64) << (j * 8);
                 } else {
                     return Err(EFAULT);
@@ -97,7 +95,8 @@ pub fn sys_linkat(
 
     // TEAM_345: Handle dirfd
     if (olddirfd != AT_FDCWD && !old_path_str.starts_with('/'))
-        || (newdirfd != AT_FDCWD && !new_path_str.starts_with('/')) {
+        || (newdirfd != AT_FDCWD && !new_path_str.starts_with('/'))
+    {
         log::warn!("[SYSCALL] linkat: dirfd not yet supported");
         return Err(EBADF);
     }
@@ -111,11 +110,7 @@ pub fn sys_linkat(
 /// TEAM_345: sys_symlinkat - Linux ABI compatible.
 /// TEAM_421: Updated to return SyscallResult.
 /// Signature: symlinkat(target, newdirfd, linkpath)
-pub fn sys_symlinkat(
-    target: usize,
-    newdirfd: i32,
-    linkpath: usize,
-) -> SyscallResult {
+pub fn sys_symlinkat(target: usize, newdirfd: i32, linkpath: usize) -> SyscallResult {
     let task = los_sched::current_task();
 
     // TEAM_418: Use PATH_MAX from SSOT

@@ -13,17 +13,16 @@ use core::any::Any;
 use core::sync::atomic::{AtomicU64, Ordering};
 use los_hal::IrqSafeLock;
 
-use los_mm::user as mm_user;
 use crate::SyscallResult;
+use los_mm::user as mm_user;
 use los_sched::fd_table::FdType;
 use los_sched::{current_task, yield_now};
 
 // TEAM_420: Direct imports from linux-raw-sys, no shims
 use linux_raw_sys::errno::{EAGAIN, EBADF, EEXIST, EFAULT, EINVAL, EMFILE, ENOENT};
 use linux_raw_sys::general::{
-    EPOLL_CTL_ADD, EPOLL_CTL_DEL, EPOLL_CTL_MOD, EPOLL_CLOEXEC,
-    EPOLLIN, EPOLLOUT, EPOLLERR,
-    EFD_CLOEXEC, EFD_NONBLOCK, EFD_SEMAPHORE,
+    EFD_CLOEXEC, EFD_NONBLOCK, EFD_SEMAPHORE, EPOLL_CLOEXEC, EPOLL_CTL_ADD, EPOLL_CTL_DEL,
+    EPOLL_CTL_MOD, EPOLLERR, EPOLLIN, EPOLLOUT,
 };
 
 /// TEAM_394: struct epoll_event (12 bytes on Linux, but we use 16 for alignment)

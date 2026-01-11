@@ -9,9 +9,9 @@ use alloc::sync::{Arc, Weak};
 use core::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use los_utils::Mutex;
 
-use los_vfs::mode;
 use los_vfs::error::VfsResult;
 use los_vfs::inode::Inode;
+use los_vfs::mode;
 use los_vfs::ops::InodeOps;
 use los_vfs::superblock::{StatFs, Superblock};
 
@@ -52,11 +52,7 @@ impl Tmpfs {
     }
 
     /// TEAM_203: Convert a TmpfsNode to a VFS Inode
-    pub fn make_inode(
-        &self,
-        node: Arc<Mutex<TmpfsNode>>,
-        sb: Weak<dyn Superblock>,
-    ) -> Arc<Inode> {
+    pub fn make_inode(&self, node: Arc<Mutex<TmpfsNode>>, sb: Weak<dyn Superblock>) -> Arc<Inode> {
         let node_locked = node.lock();
         let ino = node_locked.ino;
         let node_type = node_locked.node_type;

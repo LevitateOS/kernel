@@ -144,7 +144,10 @@ pub fn sys_gettimeofday(tv: usize, _tz: usize) -> SyscallResult {
             tv_usec: microseconds as i64,
         }
     } else {
-        Timeval { tv_sec: 0, tv_usec: 0 }
+        Timeval {
+            tv_sec: 0,
+            tv_usec: 0,
+        }
     };
 
     // TEAM_413: Use write_struct_to_user helper

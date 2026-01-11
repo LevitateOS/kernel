@@ -7,23 +7,23 @@
 extern crate alloc;
 
 // TEAM_422: Architecture-specific types from arch crates
-#[cfg(target_arch = "x86_64")]
-pub use los_arch_x86_64::{NCCS, Termios};
 #[cfg(target_arch = "aarch64")]
 pub use los_arch_aarch64::{NCCS, Termios};
+#[cfg(target_arch = "x86_64")]
+pub use los_arch_x86_64::{NCCS, Termios};
 
 use alloc::sync::Arc;
 use los_utils::Mutex;
 
 // TEAM_422: Re-export termios constants from arch crates
-#[cfg(target_arch = "x86_64")]
-pub use los_arch_x86_64::{
+#[cfg(target_arch = "aarch64")]
+pub use los_arch_aarch64::{
     ECHO, ECHOE, ECHOK, ECHONL, ICANON, IEXTEN, ISIG, NOFLSH, ONLCR, OPOST, TCGETS, TCSETS,
     TCSETSF, TCSETSW, TIOCGPTN, TIOCGWINSZ, TIOCSPTLCK, TIOCSWINSZ, TOSTOP, VEOF, VERASE, VINTR,
     VKILL, VMIN, VQUIT, VSTART, VSTOP, VSUSP, VTIME,
 };
-#[cfg(target_arch = "aarch64")]
-pub use los_arch_aarch64::{
+#[cfg(target_arch = "x86_64")]
+pub use los_arch_x86_64::{
     ECHO, ECHOE, ECHOK, ECHONL, ICANON, IEXTEN, ISIG, NOFLSH, ONLCR, OPOST, TCGETS, TCSETS,
     TCSETSF, TCSETSW, TIOCGPTN, TIOCGWINSZ, TIOCSPTLCK, TIOCSWINSZ, TOSTOP, VEOF, VERASE, VINTR,
     VKILL, VMIN, VQUIT, VSTART, VSTOP, VSUSP, VTIME,

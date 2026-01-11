@@ -136,8 +136,8 @@ pub const GIC_SPI_START: u32 = 32;
 // TEAM_015: Typed IRQ identifiers and handler registry
 // ======================================================
 
-pub use crate::traits::IrqId;
 pub use crate::traits::InterruptHandler;
+pub use crate::traits::IrqId;
 
 /// Maximum number of registered handlers
 /// TEAM_241: Increased to 34 (VirtualTimer=0, Uart=1, VirtioInput slots 0-31 = 2-33)
@@ -150,7 +150,10 @@ static mut HANDLERS: [Option<&'static dyn InterruptHandler>; MAX_HANDLERS] = [No
 ///
 /// # Safety
 /// Must be called before interrupts are enabled. Not thread-safe.
-pub fn register_handler(irq: crate::traits::IrqId, handler: &'static dyn crate::traits::InterruptHandler) {
+pub fn register_handler(
+    irq: crate::traits::IrqId,
+    handler: &'static dyn crate::traits::InterruptHandler,
+) {
     // TEAM_241: Map IrqId to handler table index
     let idx = match irq {
         crate::traits::IrqId::VirtualTimer => 0,
@@ -267,7 +270,11 @@ impl crate::traits::InterruptController for Gic {
         Self::is_spurious(irq)
     }
 
-    fn register_handler(&self, irq: crate::traits::IrqId, handler: &'static dyn crate::traits::InterruptHandler) {
+    fn register_handler(
+        &self,
+        irq: crate::traits::IrqId,
+        handler: &'static dyn crate::traits::InterruptHandler,
+    ) {
         register_handler(irq, handler);
     }
 
@@ -307,7 +314,9 @@ pub fn get_api(fdt: Option<&fdt::Fdt>) -> &'static Gic {
             // Note: GICv3 reg property usually has Distributor then Redistributors.
             // We need to parse robustly. For now we just detect presence.
             &API_V3
-        } else if let Some(_node) = crate::aarch64::fdt::find_node_by_compatible(fdt, "arm,cortex-a15-gic") {
+        } else if let Some(_node) =
+            crate::aarch64::fdt::find_node_by_compatible(fdt, "arm,cortex-a15-gic")
+        {
             // Found GICv2!
             &API
         } else {

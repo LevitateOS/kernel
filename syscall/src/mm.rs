@@ -4,16 +4,15 @@
 //! TEAM_420: Direct linux_raw_sys imports, no shims
 //! TEAM_421: Return SyscallResult, no scattered casts
 
+use crate::SyscallResult;
+use linux_raw_sys::errno::{EINVAL, ENOMEM, ENOSYS};
+use linux_raw_sys::general::{MAP_ANONYMOUS, MAP_FIXED, PROT_EXEC, PROT_READ, PROT_WRITE};
+use los_hal::mmu::{
+    self, PAGE_SIZE, PageAllocator, PageFlags, PageTable, phys_to_virt, tlb_flush_page,
+};
 use los_mm::FRAME_ALLOCATOR;
 use los_mm::user as mm_user;
 use los_mm::vma::VmaFlags;
-use crate::SyscallResult;
-use linux_raw_sys::errno::{EINVAL, ENOSYS, ENOMEM};
-use linux_raw_sys::general::{
-    PROT_READ, PROT_WRITE, PROT_EXEC,
-    MAP_FIXED, MAP_ANONYMOUS,
-};
-use los_hal::mmu::{self, PAGE_SIZE, PageAllocator, PageFlags, PageTable, phys_to_virt, tlb_flush_page};
 
 // ============================================================================
 // TEAM_415: Helper Functions
@@ -142,7 +141,10 @@ pub fn sys_sbrk(increment: isize) -> SyscallResult {
         }
         Err(()) => {
             // TEAM_389: Log heap bounds exceeded for debugging
-            log::debug!("[OOM] sys_sbrk: heap bounds exceeded (increment={})", increment);
+            log::debug!(
+                "[OOM] sys_sbrk: heap bounds exceeded (increment={})",
+                increment
+            );
             Err(ENOMEM) // TEAM_389: Return error on heap bounds exceeded
         }
     }
@@ -164,7 +166,14 @@ pub fn sys_sbrk(increment: isize) -> SyscallResult {
 ///
 /// # Returns
 /// Ok(virtual_address) on success, Err(errno) on failure.
-pub fn sys_mmap(addr: usize, len: usize, prot: u32, flags: u32, fd: i32, offset: usize) -> SyscallResult {
+pub fn sys_mmap(
+    addr: usize,
+    len: usize,
+    prot: u32,
+    flags: u32,
+    fd: i32,
+    offset: usize,
+) -> SyscallResult {
     // TEAM_228: Validate arguments
     if len == 0 {
         return Err(EINVAL);
@@ -224,7 +233,11 @@ pub fn sys_mmap(addr: usize, len: usize, prot: u32, flags: u32, fd: i32, offset:
             Some(p) => p,
             None => {
                 // TEAM_389: Log OOM for debugging
-                log::debug!("[OOM] sys_mmap: failed to allocate frame for page {}/{}", i + 1, pages_needed);
+                log::debug!(
+                    "[OOM] sys_mmap: failed to allocate frame for page {}/{}",
+                    i + 1,
+                    pages_needed
+                );
                 // TEAM_238: Guard will clean up on drop
                 return Err(ENOMEM);
             }
@@ -348,7 +361,9 @@ pub fn sys_mprotect(addr: usize, len: usize, prot: u32) -> SyscallResult {
             let entry = walk.table.entry(walk.index);
             if entry.is_valid() {
                 let phys = entry.address();
-                walk.table.entry_mut(walk.index).set(phys, new_flags | PageFlags::TABLE);
+                walk.table
+                    .entry_mut(walk.index)
+                    .set(phys, new_flags | PageFlags::TABLE);
                 tlb_flush_page(current);
                 modified_count += 1;
             }
@@ -357,11 +372,16 @@ pub fn sys_mprotect(addr: usize, len: usize, prot: u32) -> SyscallResult {
     }
 
     // Update VMA tracking
-    task.vmas.lock().update_protection(addr, end, prot_to_vma_flags(prot));
+    task.vmas
+        .lock()
+        .update_protection(addr, end, prot_to_vma_flags(prot));
 
     log::trace!(
         "[MPROTECT] Changed protection for {} pages at 0x{:x}-0x{:x} prot=0x{:x}",
-        modified_count, addr, end, prot
+        modified_count,
+        addr,
+        end,
+        prot
     );
 
     Ok(0)

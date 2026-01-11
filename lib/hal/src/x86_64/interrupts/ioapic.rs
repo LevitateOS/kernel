@@ -7,9 +7,7 @@ pub struct IoApic {
 
 impl IoApic {
     pub const fn new(base_addr: usize) -> Self {
-        Self {
-            base_addr,
-        }
+        Self { base_addr }
     }
 
     #[allow(dead_code)]

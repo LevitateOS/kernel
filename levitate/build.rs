@@ -1,3 +1,7 @@
+// Build scripts don't follow the same strict rules as library code
+#![allow(clippy::unwrap_used)]
+#![allow(clippy::uninlined_format_args)]
+
 use std::env;
 
 fn main() {

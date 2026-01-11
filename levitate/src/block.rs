@@ -28,8 +28,7 @@ define_kernel_error! {
 }
 
 // TEAM_032: Use StaticMmioTransport (MmioTransport<'static>) for static storage
-static BLOCK_DEVICE: Mutex<Option<VirtIOBlk<VirtioHal, StaticMmioTransport>>> =
-    Mutex::new(None);
+static BLOCK_DEVICE: Mutex<Option<VirtIOBlk<VirtioHal, StaticMmioTransport>>> = Mutex::new(None);
 
 pub const BLOCK_SIZE: usize = 512;
 

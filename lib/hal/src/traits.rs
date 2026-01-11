@@ -3,9 +3,9 @@
 //! TEAM_255: Decouples the kernel from architecture-specific hardware logic.
 
 #[cfg(target_arch = "aarch64")]
-use crate::aarch64::mmu::{PageFlags, MmuError};
+use crate::aarch64::mmu::{MmuError, PageFlags};
 #[cfg(target_arch = "x86_64")]
-use crate::x86_64::mem::mmu::{PageFlags, MmuError};
+use crate::x86_64::mem::mmu::{MmuError, PageFlags};
 
 /// Known IRQ sources in LevitateOS.
 /// Maps symbolic names to hardware IRQ numbers.

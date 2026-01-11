@@ -5,6 +5,9 @@ edition = "2021"
 readme = "README.md"
 description = "Error handling infrastructure for LevitateOS"
 
+[lints]
+workspace = true
+
 [features]
 default = []
 

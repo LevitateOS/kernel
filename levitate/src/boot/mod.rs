@@ -32,7 +32,7 @@
 // TEAM_316: Protocol-specific parsers (simplified - Limine only for x86_64)
 #[cfg(target_arch = "aarch64")]
 pub mod dtb;
-pub mod limine;  // TEAM_316: Primary and only boot method for x86_64
+pub mod limine; // TEAM_316: Primary and only boot method for x86_64
 
 /// Maximum number of memory regions we support.
 /// This is a compile-time limit to avoid dynamic allocation during early boot.

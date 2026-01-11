@@ -3,9 +3,9 @@
 //!
 //! Extended file stat returning struct statx with additional fields.
 
-use los_mm::user as mm_user;
 use crate::SyscallResult;
 use linux_raw_sys::errno::{EBADF, EFAULT, ENOENT};
+use los_mm::user as mm_user;
 
 /// AT_EMPTY_PATH flag for statx
 const AT_EMPTY_PATH: i32 = 0x1000;
@@ -62,7 +62,13 @@ const STATX_BASIC_STATS: u32 = 0x07FF;
 /// * `flags` - Flags (AT_EMPTY_PATH, AT_SYMLINK_NOFOLLOW, etc.)
 /// * `mask` - What fields to return
 /// * `statxbuf` - User buffer for struct statx
-pub fn sys_statx(dirfd: i32, pathname: usize, flags: i32, _mask: u32, statxbuf: usize) -> SyscallResult {
+pub fn sys_statx(
+    dirfd: i32,
+    pathname: usize,
+    flags: i32,
+    _mask: u32,
+    statxbuf: usize,
+) -> SyscallResult {
     let task = los_sched::current_task();
     let statx_size = core::mem::size_of::<Statx>();
 
@@ -98,8 +104,8 @@ pub fn sys_statx(dirfd: i32, pathname: usize, flags: i32, _mask: u32, statxbuf: 
 /// Get statx by file descriptor
 /// TEAM_421: Returns SyscallResult
 fn statx_by_fd(fd: usize, statxbuf: usize, ttbr0: usize) -> SyscallResult {
-    use los_vfs::dispatch::vfs_fstat;
     use los_sched::fd_table::FdType;
+    use los_vfs::dispatch::vfs_fstat;
 
     let task = los_sched::current_task();
     let fd_table = task.fd_table.lock();

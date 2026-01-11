@@ -5,8 +5,8 @@
 //! TEAM_417: Extracted from process.rs.
 //! TEAM_420: Uses linux_raw_sys directly, no shims
 
-use los_mm::user as mm_user;
 use crate::SyscallResult;
+use los_mm::user as mm_user;
 // TEAM_420: Direct imports from linux_raw_sys
 use linux_raw_sys::errno::{ENOMEM, ENOSYS};
 use linux_raw_sys::general::{

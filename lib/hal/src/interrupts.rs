@@ -21,14 +21,16 @@ pub fn disable() -> u64 {
 }
 
 /// [I7] Unconditionally enables interrupts
-/// 
+///
 /// # Safety
 /// This function can cause race conditions if not used carefully.
 #[inline(always)]
 pub unsafe fn enable() {
     #[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
     {
-        unsafe { arch_interrupts::enable(); }
+        unsafe {
+            arch_interrupts::enable();
+        }
     }
 }
 

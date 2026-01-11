@@ -5,10 +5,10 @@
 //! TEAM_417: Extracted from process.rs.
 //! TEAM_421: Returns SyscallResult, no scattered casts.
 
-use los_mm::user as mm_user;
 use crate::SyscallResult;
-use linux_raw_sys::errno::EFAULT;
 use core::sync::atomic::Ordering;
+use linux_raw_sys::errno::EFAULT;
+use los_mm::user as mm_user;
 
 // ============================================================================
 // TEAM_350: Eyra Prerequisites - Simple Identity Syscalls
@@ -126,9 +126,8 @@ pub fn sys_uname(buf: usize) -> SyscallResult {
     };
 
     // Copy to user space byte by byte
-    let bytes = unsafe {
-        core::slice::from_raw_parts(&utsname as *const Utsname as *const u8, size)
-    };
+    let bytes =
+        unsafe { core::slice::from_raw_parts(&utsname as *const Utsname as *const u8, size) };
 
     for (i, &byte) in bytes.iter().enumerate() {
         if let Some(ptr) = mm_user::user_va_to_kernel_ptr(task.ttbr0, buf + i) {

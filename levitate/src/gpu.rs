@@ -7,8 +7,8 @@
 //!
 //! See: `docs/planning/virtio-pci/` for the implementation plan
 
-use los_hal::IrqSafeLock;
 use core::sync::atomic::{AtomicU32, Ordering};
+use los_hal::IrqSafeLock;
 
 use crate::virtio::VirtioHal;
 
@@ -216,9 +216,10 @@ pub fn framebuffer_has_content() -> Option<(usize, usize)> {
         let fb = gpu_state.framebuffer();
         let total_pixels = fb.len() / 4; // BGRA format
         let mut non_black = 0usize;
-        
+
         // Sample every 100th pixel for performance (still catches any rendering)
-        for i in (0..fb.len()).step_by(400) { // 400 = 100 pixels * 4 bytes
+        for i in (0..fb.len()).step_by(400) {
+            // 400 = 100 pixels * 4 bytes
             // Check if R, G, or B is non-zero (index+2=R, index+1=G, index=B)
             if i + 2 < fb.len() && (fb[i] != 0 || fb[i + 1] != 0 || fb[i + 2] != 0) {
                 non_black += 1;
@@ -234,7 +235,7 @@ pub fn framebuffer_has_content() -> Option<(usize, usize)> {
 /// Outputs a clear indicator whether the screen is black or has content
 pub fn debug_display_status() {
     use los_hal::serial_println;
-    
+
     let guard = GPU.lock();
     if guard.is_none() {
         serial_println!("╔══════════════════════════════════════════════════════════╗");
@@ -243,19 +244,30 @@ pub fn debug_display_status() {
         return;
     }
     drop(guard);
-    
+
     match framebuffer_has_content() {
         Some((total, non_black)) => {
-            let percentage = if total > 0 { (non_black * 100) / total } else { 0 };
+            let percentage = if total > 0 {
+                (non_black * 100) / total
+            } else {
+                0
+            };
             serial_println!("╔══════════════════════════════════════════════════════════╗");
             if non_black == 0 {
                 serial_println!("║  [GPU DEBUG] DISPLAY STATUS: BLACK SCREEN ❌             ║");
                 serial_println!("║  Framebuffer is entirely black - no content rendered     ║");
             } else {
                 serial_println!("║  [GPU DEBUG] DISPLAY STATUS: HAS CONTENT ✅              ║");
-                serial_println!("║  Non-black pixels: {} (~{}% of screen)            ", non_black, percentage);
+                serial_println!(
+                    "║  Non-black pixels: {} (~{}% of screen)            ",
+                    non_black,
+                    percentage
+                );
             }
-            serial_println!("║  Flush count: {}                                          ", flush_count());
+            serial_println!(
+                "║  Flush count: {}                                          ",
+                flush_count()
+            );
             serial_println!("╚══════════════════════════════════════════════════════════╝");
         }
         None => {
@@ -278,7 +290,9 @@ pub fn init(transport: Option<GpuTransport>) {
         match los_gpu::Gpu::new(transport) {
             Ok(gpu) => {
                 log::info!("[GPU] Initialized via VirtIO transport");
-                *GPU.lock() = Some(GpuState { backend: GpuBackend::VirtIO(gpu) });
+                *GPU.lock() = Some(GpuState {
+                    backend: GpuBackend::VirtIO(gpu),
+                });
                 return;
             }
             Err(e) => {
@@ -292,16 +306,22 @@ pub fn init(transport: Option<GpuTransport>) {
     // TEAM_331: Fall back to Limine framebuffer if available
     if let Some(boot_info) = crate::boot::boot_info() {
         if let Some(ref fb) = boot_info.framebuffer {
-            log::info!("[GPU] Using Limine framebuffer fallback: {}x{}", fb.width, fb.height);
+            log::info!(
+                "[GPU] Using Limine framebuffer fallback: {}x{}",
+                fb.width,
+                fb.height
+            );
             let fb_gpu = FramebufferGpu::new(fb);
-            
+
             // Clear framebuffer to black
-            let mut state = GpuState { backend: GpuBackend::Framebuffer(fb_gpu) };
+            let mut state = GpuState {
+                backend: GpuBackend::Framebuffer(fb_gpu),
+            };
             let framebuffer = state.framebuffer();
             for byte in framebuffer.iter_mut() {
                 *byte = 0;
             }
-            
+
             *GPU.lock() = Some(state);
             return;
         }

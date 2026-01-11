@@ -83,9 +83,10 @@ impl BuddyAllocator {
         for i in order..MAX_ORDER {
             if !self.free_lists[i].is_empty() {
                 // Found a block! Pop it from the list.
-                let page_ptr = self.free_lists[i].pop_front()
+                let page_ptr = self.free_lists[i]
+                    .pop_front()
                     .expect("TEAM_135: List was not empty but pop_front failed");
-                
+
                 // SAFETY: page_ptr comes from our mem_map via add_to_list
                 let page = unsafe { &mut *page_ptr.as_ptr() };
 
@@ -145,7 +146,9 @@ impl BuddyAllocator {
 
         // Add the (possibly coalesced) block to the free list
         // TEAM_130: Page must exist - caller passed valid PA from prior allocation
-        let page = self.pa_to_page_mut(curr_pa).expect("TEAM_130: Page must exist - invalid PA passed to free");
+        let page = self
+            .pa_to_page_mut(curr_pa)
+            .expect("TEAM_130: Page must exist - invalid PA passed to free");
         page.reset();
         page.mark_free();
         page.order = curr_order as u8;
@@ -171,7 +174,10 @@ impl BuddyAllocator {
     // Helper: Convert Page descriptor to Physical Address
     fn page_to_pa(&self, page: &Page) -> usize {
         // TEAM_130: mem_map must be set - allocator is unusable if not initialized
-        let mem_map = self.mem_map.as_ref().expect("TEAM_130: mem_map must be set - allocator not initialized");
+        let mem_map = self
+            .mem_map
+            .as_ref()
+            .expect("TEAM_130: mem_map must be set - allocator not initialized");
         let offset = page as *const Page as usize - mem_map.as_ptr() as usize;
         let index = offset / core::mem::size_of::<Page>();
         self.phys_base + index * PAGE_SIZE

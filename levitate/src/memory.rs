@@ -26,8 +26,7 @@ pub fn init(boot_info: &BootInfo) {
     let mut phys_max = 0usize;
 
     // Collect RAM and reserved regions
-    let mut ram_regions: [Option<(usize, usize)>; MAX_RAM_REGIONS] =
-        [None; MAX_RAM_REGIONS];
+    let mut ram_regions: [Option<(usize, usize)>; MAX_RAM_REGIONS] = [None; MAX_RAM_REGIONS];
     let mut ram_count = 0usize;
 
     let mut reserved_regions: [Option<(usize, usize)>; MAX_RESERVED_REGIONS] =
@@ -105,7 +104,12 @@ pub fn init(boot_info: &BootInfo) {
 
     // Reserve the page array region
     let array_end = array_phys + page_array_pages * 0x1000;
-    add_reserved(&mut reserved_regions, &mut reserved_count, array_phys, array_end);
+    add_reserved(
+        &mut reserved_regions,
+        &mut reserved_count,
+        array_phys,
+        array_end,
+    );
 
     // Create page metadata array
     let array_va = los_hal::mmu::phys_to_virt(array_phys);
