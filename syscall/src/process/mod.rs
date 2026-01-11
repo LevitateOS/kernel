@@ -20,6 +20,8 @@ pub use identity::{
 pub use lifecycle::{
     sys_exec, sys_exit, sys_exit_group, sys_get_foreground, sys_getpid, sys_getppid,
     sys_set_foreground, sys_spawn, sys_spawn_args, sys_waitpid, sys_yield,
+    // TEAM_429: Hooks for kernel integration
+    RESOLVE_EXECUTABLE_HOOK, SPAWN_FROM_ELF_HOOK, SPAWN_FROM_ELF_WITH_ARGS_HOOK,
 };
 pub use resources::{sys_getrusage, sys_prlimit64};
 pub use thread::{sys_clone, sys_set_tid_address};

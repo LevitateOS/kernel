@@ -62,12 +62,19 @@ mod aarch64_handlers {
         crate::arch::cpu::halt();
     }
 
-    /// Handle IRQ dispatch
+    /// Handle IRQ dispatch - delegates to HAL registered handlers
     #[unsafe(no_mangle)]
     pub extern "C" fn handle_irq_dispatch(irq: u32) -> bool {
-        // TODO: Implement proper IRQ handling
-        log::trace!("IRQ {}", irq);
-        false
+        #[cfg(target_arch = "aarch64")]
+        {
+            los_hal::aarch64::gic::dispatch(irq)
+        }
+        #[cfg(target_arch = "x86_64")]
+        {
+            // x86_64 handles dispatch in HAL exceptions.rs directly
+            let _ = irq;
+            false
+        }
     }
 
     /// Check and deliver signals before returning to userspace

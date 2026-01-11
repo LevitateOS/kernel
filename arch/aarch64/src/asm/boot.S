@@ -1,4 +1,7 @@
 // TEAM_422: AArch64 boot assembly with early MMU setup
+// TEAM_427: Investigation of boot failures - see .teams/TEAM_427_aarch64_boot_investigation.md
+//           Status: Partial fix - kernel prints boot messages but crashes during memory::init()
+//           with L0 translation fault at FAR 0xffff800040082000
 //
 // Boot sequence:
 // 1. Save boot registers (x0-x3) from bootloader
@@ -59,6 +62,13 @@ _start:
     // Disable interrupts
     msr daifset, #0xf
 
+    // TEAM_427: Enable FP/SIMD (required for Rust code) FIRST
+    // Use x9 as a scratch register to preserve x0-x3 boot registers
+    // Set CPACR_EL1.FPEN to 0b11 (bits 21:20) to enable EL1/EL0 access
+    mov x9, #(3 << 20)
+    msr cpacr_el1, x9
+    isb
+
     // Save boot registers to physical-address symbols
     // x0 = DTB address (on QEMU virt), x1-x3 = bootloader-specific
     adrp x4, BOOT_REGS_PHYS
@@ -77,8 +87,10 @@ _start:
     // But wait - at this point we're using the linker symbol directly
     // and the literal pool is at physical address, containing the virtual address.
     // We need to calculate the physical address.
-    movz x5, #0x8000, lsl #48  // 0xFFFF800000000000 high bits
-    movk x5, #0xFFFF, lsl #48
+    // TEAM_427: Build 0xFFFF_8000_0000_0000 correctly
+    // movz sets bits 63:48 to 0xFFFF, movk sets bits 47:32 to 0x8000
+    movz x5, #0xFFFF, lsl #48  // x5 = 0xFFFF_0000_0000_0000
+    movk x5, #0x8000, lsl #32  // x5 = 0xFFFF_8000_0000_0000
     sub x4, x4, x5              // Convert VA to PA
     mov sp, x4
 
@@ -184,7 +196,29 @@ _start:
     // Load TTBR1_EL1 (higher-half map) - x10 still holds __boot_l0_ttbr1
     msr ttbr1_el1, x10
 
-    // Ensure all table writes are visible before enabling MMU
+    // TEAM_428: Ensure page table writes are visible to MMU
+    // CRITICAL FIX: Must clean+invalidate the ENTIRE page table region,
+    // not just the entries we wrote. The zeroing loop may have left
+    // stale data in the cache that could corrupt the MMU's view.
+    //
+    // Page tables span 16KB (4 x 4KB tables) from __boot_l0_ttbr1 to
+    // __boot_page_tables_end. That's 256 cache lines (64 bytes each).
+    dsb sy
+
+    // Clean and invalidate entire page table region (16KB)
+    // x10 = __boot_l0_ttbr1 (start of page tables)
+    mov x3, x10                 // Start address
+    mov x4, #256                // 256 cache lines = 16KB
+.Lflush_pt_cache:
+    dc civac, x3                // Clean+invalidate cache line at x3
+    add x3, x3, #64             // Next cache line (64 bytes)
+    subs x4, x4, #1             // Decrement counter
+    b.ne .Lflush_pt_cache       // Loop until done
+    dsb sy
+    isb
+
+    // Invalidate TLB before enabling MMU
+    tlbi vmalle1
     dsb sy
     isb
 
@@ -196,6 +230,13 @@ _start:
     msr sctlr_el1, x3
 
     dsb sy
+    isb
+
+    // TEAM_427: Set up exception vectors BEFORE jumping to Rust
+    // This ensures any early exceptions are properly caught
+    .extern vectors
+    ldr x4, =vectors
+    msr vbar_el1, x4
     isb
 
     // === Jump to higher-half Rust entry point ===

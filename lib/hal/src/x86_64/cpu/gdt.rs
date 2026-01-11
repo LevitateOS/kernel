@@ -104,6 +104,32 @@ pub unsafe fn init() {
         };
 
         crate::x86_64::cpu::lgdt(&ptr);
+
+        // TEAM_429: Reload segment registers after loading new GDT
+        // Limine leaves us with its segment selectors, which may not match our GDT.
+        // CS must be reloaded via far return, other segments via mov.
+        core::arch::asm!(
+            // Reload CS via far return
+            "push {kernel_code}",   // Push new CS (0x08)
+            "lea rax, [rip + 2f]",  // Get return address
+            "push rax",             // Push return address
+            "retfq",                // Far return to reload CS
+            "2:",
+            // Reload data segment registers with kernel data (0x10)
+            "mov ax, {kernel_data}",
+            "mov ds, ax",
+            "mov es, ax",
+            "mov ss, ax",
+            // FS and GS are used for TLS, set to 0 initially
+            "xor ax, ax",
+            "mov fs, ax",
+            "mov gs, ax",
+            kernel_code = const KERNEL_CODE as u64,
+            kernel_data = const KERNEL_DATA,
+            out("rax") _,
+            options(nostack)
+        );
+
         crate::x86_64::cpu::ltr(TSS_SELECTOR);
     }
 }

@@ -68,6 +68,28 @@ pub fn init() {
     idt::init();
     exceptions::init();
 
+    // TEAM_429: Enable SSE/FPU for userspace
+    // Limine may have SSE enabled, but we ensure it explicitly after GDT reload.
+    // CR0: Clear EM (bit 2), set MP (bit 1)
+    // CR4: Set OSFXSR (bit 9), OSXMMEXCPT (bit 10)
+    unsafe {
+        core::arch::asm!(
+            // Modify CR0: clear EM (bit 2), set MP (bit 1)
+            "mov rax, cr0",
+            "and ax, 0xFFFB",       // Clear EM (bit 2)
+            "or ax, 0x2",           // Set MP (bit 1)
+            "mov cr0, rax",
+            // Modify CR4: set OSFXSR (bit 9), OSXMMEXCPT (bit 10)
+            "mov rax, cr4",
+            "or ax, 0x600",         // Set bits 9 and 10
+            "mov cr4, rax",
+            // Initialize FPU
+            "fninit",
+            out("rax") _,
+            options(nostack)
+        );
+    }
+
     // 3. Initialize legacy 8259 PIC
     // TEAM_319: APIC MMIO (0xFEE00000) is outside HHDM range, use legacy PIC instead.
     // This remaps IRQ0-7 to vectors 32-39 and unmasks IRQ0 (timer).

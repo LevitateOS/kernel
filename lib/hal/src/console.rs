@@ -14,6 +14,11 @@ type SecondaryOutputFn = fn(&str);
 static SECONDARY_OUTPUT: AtomicPtr<()> = AtomicPtr::new(core::ptr::null_mut());
 static SECONDARY_OUTPUT_ENABLED: AtomicBool = AtomicBool::new(false);
 
+// TEAM_429: Secondary input callback for VirtIO keyboard
+type SecondaryInputFn = fn() -> Option<char>;
+static SECONDARY_INPUT: AtomicPtr<()> = AtomicPtr::new(core::ptr::null_mut());
+static SECONDARY_INPUT_ENABLED: AtomicBool = AtomicBool::new(false);
+
 static RX_BUFFER: IrqSafeLock<RingBuffer<u8, 1024>> = IrqSafeLock::new(RingBuffer::new(0));
 
 /// TEAM_244: Flag set when Ctrl+C (0x03) is received via serial interrupt
@@ -65,6 +70,17 @@ pub fn poll_for_ctrl_c() -> bool {
 }
 
 pub fn read_byte() -> Option<u8> {
+    // TEAM_429: Check secondary input (VirtIO keyboard) first
+    if SECONDARY_INPUT_ENABLED.load(Ordering::Acquire) {
+        let ptr = SECONDARY_INPUT.load(Ordering::Acquire);
+        if !ptr.is_null() {
+            let callback: SecondaryInputFn = unsafe { core::mem::transmute(ptr) };
+            if let Some(c) = callback() {
+                return Some(c as u8);
+            }
+        }
+    }
+
     if let Some(byte) = RX_BUFFER.lock().pop() {
         return Some(byte);
     }
@@ -74,6 +90,12 @@ pub fn read_byte() -> Option<u8> {
 pub fn set_secondary_output(callback: SecondaryOutputFn) {
     SECONDARY_OUTPUT.store(callback as *mut (), Ordering::SeqCst);
     SECONDARY_OUTPUT_ENABLED.store(true, Ordering::SeqCst);
+}
+
+/// TEAM_429: Register secondary input source (e.g., VirtIO keyboard)
+pub fn set_secondary_input(callback: SecondaryInputFn) {
+    SECONDARY_INPUT.store(callback as *mut (), Ordering::SeqCst);
+    SECONDARY_INPUT_ENABLED.store(true, Ordering::SeqCst);
 }
 
 #[allow(dead_code)]
