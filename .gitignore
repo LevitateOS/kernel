@@ -1,0 +1,16 @@
+# Build artifacts
+*.bin
+*.o
+*.elf
+*.log
+target/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Debug output
+*.gdb
+debug_out.txt
