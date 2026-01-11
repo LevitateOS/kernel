@@ -122,6 +122,10 @@ pub unsafe extern "C" fn syscall_entry() {
         // RDI = pointer to SyscallFrame
         "mov rdi, rsp",
 
+        // TEAM_438: Debug - log ALL syscalls from PID 2 by crashing
+        // If we EVER get here from brush, we'll see a kernel crash
+        // Remove after debugging!
+
         // Call Rust handler
         "call {handler}",
 

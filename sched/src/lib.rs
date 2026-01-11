@@ -64,9 +64,11 @@ pub extern "C" fn task_exit() -> ! {
 
     // TEAM_071: Mark task as exited (Design Q2)
     task.set_state(TaskState::Exited);
+    log::trace!("[TASK_EXIT] PID {} marked Exited, calling schedule()", task.id.0);
 
     // Yield to next task without re-adding self to ready queue
     scheduler::SCHEDULER.schedule();
+
 
     // If we return here, no other tasks are ready - enter idle
     loop {
@@ -152,6 +154,7 @@ pub fn switch_to(new_task: Arc<TaskControlBlock>) {
     if Arc::ptr_eq(&old_task, &new_task) {
         return; // [MT4] no-op for same task
     }
+
 
     unsafe {
         // SAFETY: We cast to mut pointers for the assembly.
@@ -399,6 +402,7 @@ pub fn user_task_entry_wrapper() -> ! {
 
         // TEAM_408: Set TLS pointer before entering userspace
         // On AArch64, TPIDR_EL0 must be set before eret or userspace TLS access will fault
+        // On x86_64, FS_BASE must be set for TLS access
         #[cfg(target_arch = "aarch64")]
         {
             let tls = task.tls.load(core::sync::atomic::Ordering::Acquire);
@@ -408,6 +412,24 @@ pub fn user_task_entry_wrapper() -> ! {
                 task.id.0
             );
             core::arch::asm!("msr tpidr_el0, {}", in(reg) tls);
+        }
+        #[cfg(target_arch = "x86_64")]
+        {
+            // TEAM_438: Set FS_BASE for TLS before entering userspace
+            let tls = task.tls.load(core::sync::atomic::Ordering::Acquire);
+            if tls != 0 {
+                log::info!("[TASK] Setting FS_BASE=0x{:x} for PID={}", tls, task.id.0);
+                const IA32_FS_BASE: u32 = 0xC0000100;
+                let lo = tls as u32;
+                let hi = (tls >> 32) as u32;
+                core::arch::asm!(
+                    "wrmsr",
+                    in("ecx") IA32_FS_BASE,
+                    in("eax") lo,
+                    in("edx") hi,
+                    options(nostack, nomem)
+                );
+            }
         }
 
         // Enter EL0 (AArch64) or Ring 3 (x86_64)

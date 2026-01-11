@@ -126,6 +126,8 @@ pub enum SyscallNumber {
     Getpgid = 121,
     Getpgrp = 111,
     Setsid = 112,
+    // TEAM_438: Socket syscalls for brush
+    Socketpair = 53,
     // TEAM_394: fcntl for brush (F_SETPIPE_SZ, etc.)
     Fcntl = 72,
     // TEAM_409: Additional syscalls for coreutils
@@ -238,6 +240,8 @@ impl SyscallNumber {
             121 => Some(Self::Getpgid),
             111 => Some(Self::Getpgrp),
             112 => Some(Self::Setsid),
+            // TEAM_438: Socket syscalls for brush
+            53 => Some(Self::Socketpair),
             72 => Some(Self::Fcntl),
             // TEAM_409: Additional syscalls for coreutils
             262 => Some(Self::Fstatat),
@@ -421,11 +425,68 @@ pub unsafe fn switch_mmu_config(config_phys: usize) {
     }
 }
 
-// TEAM_258: Stub for exception_return (not used on x86_64, but needed for shared code)
+// TEAM_438: exception_return for x86_64 - returns to userspace from a SyscallFrame
+// Used by threads created via clone() to enter userspace for the first time.
+// RSP must point to a valid SyscallFrame when this is called.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn exception_return() {
-    // Stub - x86_64 uses different return mechanism (sysret/iret)
-    unimplemented!("x86_64 exception_return");
+pub unsafe extern "C" fn exception_return() -> ! {
+    // The SyscallFrame is on the stack. We need to restore registers and sysretq.
+    // This mirrors the return path in syscall_entry but as a standalone function.
+    unsafe {
+        core::arch::asm!(
+            // RSP should point to the SyscallFrame
+            // Frame layout (from syscall_entry):
+            // [0]  rax (syscall_nr / return value)
+            // [1]  rdi (arg0)
+            // [2]  rsi (arg1)
+            // [3]  rdx (arg2)
+            // [4]  r10 (arg3)
+            // [5]  r8  (arg4)
+            // [6]  r9  (arg5)
+            // [7]  rcx (user RIP)
+            // [8]  r11 (user RFLAGS)
+            // [9]  rbx
+            // [10] rbp
+            // [11] r12
+            // [12] r13
+            // [13] r14
+            // [14] r15
+            // [15] rsp (user RSP)
+            // ... more fields we don't need
+
+            // Sanitize RFLAGS (index 8)
+            "mov rax, [rsp + 8*8]",
+            "and rax, 0x3C7FD7",       // Mask restricted bits
+            "or rax, 0x202",            // Force IF=1, bit1=1
+            "mov [rsp + 8*8], rax",
+
+            // Restore registers
+            "pop rax",                  // Return value
+            "pop rdi",
+            "pop rsi",
+            "pop rdx",
+            "pop r10",
+            "pop r8",
+            "pop r9",
+            "pop rcx",                  // User RIP
+            "pop r11",                  // User RFLAGS
+            "pop rbx",
+            "pop rbp",
+            "pop r12",
+            "pop r13",
+            "pop r14",
+            "pop r15",
+
+            // Now RSP points to frame.rsp (user RSP)
+            "cli",                      // Disable interrupts before swapgs
+            "mov rsp, [rsp]",           // Load user RSP
+
+            "swapgs",                   // Swap to user GS
+            "sysretq",                  // Return to Ring 3
+
+            options(noreturn)
+        );
+    }
 }
 
 // TEAM_422: Kernel integration is handled by the levitate binary, not this crate.

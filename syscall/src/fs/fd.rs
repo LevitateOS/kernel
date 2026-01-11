@@ -37,8 +37,12 @@ const F_GETFD: i32 = 1;
 const F_SETFD: i32 = 2;
 const F_GETFL: i32 = 3;
 const F_SETFL: i32 = 4;
+// TEAM_438: Linux-specific fcntl commands (base = 1024)
+const F_DUPFD_CLOEXEC: i32 = 1030; // F_LINUX_SPECIFIC_BASE + 6
 const F_SETPIPE_SZ: i32 = 1031;
 const F_GETPIPE_SZ: i32 = 1032;
+const F_ADD_SEALS: i32 = 1033;
+const F_GET_SEALS: i32 = 1034;
 
 /// TEAM_394: sys_fcntl - File control operations.
 ///
@@ -55,8 +59,9 @@ pub fn sys_fcntl(fd: i32, cmd: i32, arg: usize) -> SyscallResult {
     let task = current_task();
 
     match cmd {
-        F_DUPFD => {
+        F_DUPFD | F_DUPFD_CLOEXEC => {
             // Duplicate fd to >= arg
+            // TEAM_438: F_DUPFD_CLOEXEC sets close-on-exec (we ignore that for now)
             let mut fd_table = task.fd_table.lock();
             match fd_table.dup(fd as usize) {
                 Some(new_fd) => Ok(new_fd as i64),

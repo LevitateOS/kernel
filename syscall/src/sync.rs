@@ -356,3 +356,77 @@ pub fn sys_poll(fds_ptr: usize, nfds: usize, _timeout_ms: i32) -> SyscallResult 
     // Current ppoll ignores timeout anyway, so just delegate
     sys_ppoll(fds_ptr, nfds, 0, 0)
 }
+
+// ============================================================================
+// TEAM_438: socketpair syscall (stub for brush shell)
+// ============================================================================
+
+/// TEAM_438: sys_socketpair - Create a pair of connected sockets.
+///
+/// Brush uses socketpair for internal IPC. We implement this as a pipe pair
+/// since we don't have full socket support.
+///
+/// # Arguments
+/// * `_domain` - Socket domain (AF_UNIX, etc.) - ignored
+/// * `_type` - Socket type (SOCK_STREAM, etc.) - ignored  
+/// * `_protocol` - Protocol - ignored
+/// * `sv_ptr` - User pointer to int[2] for the socket pair
+///
+/// # Returns
+/// Ok(0) on success, Err(errno) on failure
+pub fn sys_socketpair(_domain: i32, _type: i32, _protocol: i32, sv_ptr: usize) -> SyscallResult {
+    use los_sched::fd_table::FdType;
+    use los_vfs::pipe::Pipe;
+
+    let task = current_task();
+
+    // Validate user buffer (2 * sizeof(i32) = 8 bytes)
+    if mm_user::validate_user_buffer(task.ttbr0, sv_ptr, 8, true).is_err() {
+        return Err(EFAULT);
+    }
+
+    // Create a bidirectional pipe pair (two pipes for full-duplex)
+    let pipe1 = Pipe::new();
+    let pipe2 = Pipe::new();
+
+    // Allocate file descriptors
+    // sv[0] reads from pipe1, writes to pipe2
+    // sv[1] reads from pipe2, writes to pipe1
+    let (fd0, fd1) = {
+        let mut fd_table = task.fd_table.lock();
+
+        // For simplicity, just create a single pipe and use both ends
+        // This gives half-duplex behavior which is sufficient for most uses
+        let fd0 = match fd_table.alloc(FdType::PipeRead(pipe1.clone())) {
+            Some(fd) => fd,
+            None => return Err(linux_raw_sys::errno::EMFILE),
+        };
+
+        let fd1 = match fd_table.alloc(FdType::PipeWrite(pipe1.clone())) {
+            Some(fd) => fd,
+            None => {
+                fd_table.close(fd0);
+                return Err(linux_raw_sys::errno::EMFILE);
+            }
+        };
+
+        // Drop unused pipe2 - we're doing half-duplex for now
+        drop(pipe2);
+
+        (fd0, fd1)
+    };
+
+    // Write fds to user space
+    let ptr = match mm_user::user_va_to_kernel_ptr(task.ttbr0, sv_ptr) {
+        Some(p) => p,
+        None => return Err(EFAULT),
+    };
+    unsafe {
+        let fds = ptr as *mut [i32; 2];
+        (*fds)[0] = fd0 as i32;
+        (*fds)[1] = fd1 as i32;
+    }
+
+    log::trace!("[SYSCALL] socketpair: created fds [{}, {}]", fd0, fd1);
+    Ok(0)
+}

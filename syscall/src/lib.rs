@@ -384,6 +384,13 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
         #[cfg(target_arch = "x86_64")]
         Some(SyscallNumber::Getpgrp) => process::sys_getpgrp(),
         Some(SyscallNumber::Setsid) => process::sys_setsid(),
+        // TEAM_438: Socket syscalls for brush - stub returns pipe pair
+        Some(SyscallNumber::Socketpair) => sync::sys_socketpair(
+            frame.arg0() as i32,
+            frame.arg1() as i32,
+            frame.arg2() as i32,
+            frame.arg3() as usize,
+        ),
         Some(SyscallNumber::Fcntl) => fs::sys_fcntl(
             frame.arg0() as i32,
             frame.arg1() as i32,

@@ -95,6 +95,14 @@ pub fn create_thread(
     // We want to call `exception_return`, which restores from SP and erets.
     let mut context = Context::new(child_frame_addr, exception_return as *const () as usize);
 
+    // TEAM_438: On x86_64, we need to jump directly to exception_return, not task_entry_trampoline.
+    // task_entry_trampoline is a Rust function that creates stack frames and corrupts RSP.
+    // For threads, RSP must point to the SyscallFrame when exception_return runs.
+    #[cfg(target_arch = "x86_64")]
+    {
+        context.rip = exception_return as *const () as usize as u64;
+    }
+
     // TEAM_258: Set TLS in context using abstraction (architecture-independent)
     if child_tls != 0 {
         context.set_tls(child_tls as u64);
