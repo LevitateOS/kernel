@@ -7,6 +7,7 @@
 
 use super::{BootInfo, BootProtocol, FirmwareInfo, MemoryKind, MemoryRegion};
 use los_hal::aarch64::fdt::{self, Fdt};
+use los_hal::mmu::{KERNEL_PHYS_END, KERNEL_PHYS_START};
 
 /// TEAM_282: Parse DTB into BootInfo.
 ///
@@ -28,13 +29,9 @@ pub unsafe fn parse(dtb_ptr: usize) -> BootInfo {
     let dtb_slice = unsafe { core::slice::from_raw_parts(dtb_ptr as *const u8, 1024 * 1024) };
 
     if let Ok(fdt_obj) = Fdt::new(dtb_slice) {
-        // Extract memory regions using HAL helper
+        // TEAM_428: Split memory regions around kernel to avoid overwriting boot page tables
         fdt::for_each_memory_region(&fdt_obj, |region| {
-            let _ = boot_info.memory_map.push(MemoryRegion::new(
-                region.start,
-                region.end - region.start,
-                MemoryKind::Usable,
-            ));
+            add_memory_region_with_kernel_split(&mut boot_info, region.start, region.end);
         });
 
         // Try to find initramfs
@@ -61,13 +58,9 @@ pub fn parse_from_slice(dtb_slice: &[u8], dtb_phys: usize) -> BootInfo {
     boot_info.firmware = FirmwareInfo::DeviceTree { dtb: dtb_phys };
 
     if let Ok(fdt_obj) = Fdt::new(dtb_slice) {
-        // Extract memory regions using HAL helper
+        // TEAM_428: Split memory regions around kernel to avoid overwriting boot page tables
         fdt::for_each_memory_region(&fdt_obj, |region| {
-            let _ = boot_info.memory_map.push(MemoryRegion::new(
-                region.start,
-                region.end - region.start,
-                MemoryKind::Usable,
-            ));
+            add_memory_region_with_kernel_split(&mut boot_info, region.start, region.end);
         });
 
         // Try to find initramfs
@@ -83,4 +76,47 @@ pub fn parse_from_slice(dtb_slice: &[u8], dtb_phys: usize) -> BootInfo {
     }
 
     boot_info
+}
+
+/// TEAM_428: Add a memory region to boot_info, splitting around the kernel physical region.
+///
+/// This prevents the page array allocation from overlapping with the kernel and
+/// boot page tables, which would cause an L0 translation fault when memory::init()
+/// zeros the page array.
+fn add_memory_region_with_kernel_split(boot_info: &mut BootInfo, start: usize, end: usize) {
+    // Check if this region overlaps with kernel
+    if end <= KERNEL_PHYS_START || start >= KERNEL_PHYS_END {
+        // No overlap - add as usable
+        let _ = boot_info.memory_map.push(MemoryRegion::new(
+            start,
+            end - start,
+            MemoryKind::Usable,
+        ));
+    } else {
+        // Region overlaps with kernel - split into parts
+        // Part before kernel
+        if start < KERNEL_PHYS_START {
+            let _ = boot_info.memory_map.push(MemoryRegion::new(
+                start,
+                KERNEL_PHYS_START - start,
+                MemoryKind::Usable,
+            ));
+        }
+        // Kernel region itself (reserved)
+        let kernel_start = start.max(KERNEL_PHYS_START);
+        let kernel_end = end.min(KERNEL_PHYS_END);
+        let _ = boot_info.memory_map.push(MemoryRegion::new(
+            kernel_start,
+            kernel_end - kernel_start,
+            MemoryKind::Kernel,
+        ));
+        // Part after kernel
+        if end > KERNEL_PHYS_END {
+            let _ = boot_info.memory_map.push(MemoryRegion::new(
+                KERNEL_PHYS_END,
+                end - KERNEL_PHYS_END,
+                MemoryKind::Usable,
+            ));
+        }
+    }
 }
