@@ -358,6 +358,15 @@ fn init_display() {
 /// Initialize VirtIO devices (block, network, input).
 fn init_devices() {
     crate::virtio::init();
+
+    // TEAM_429: Register VirtIO keyboard as secondary console input
+    // This allows the shell to receive keyboard input from VirtIO devices
+    fn virtio_keyboard_input() -> Option<char> {
+        // Poll VirtIO input devices first to get fresh events
+        crate::input::poll();
+        crate::input::read_char()
+    }
+    los_hal::console::set_secondary_input(virtio_keyboard_input);
 }
 
 /// Initialize userspace: load and spawn init from initramfs.
