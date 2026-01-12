@@ -338,8 +338,14 @@ fn init_display() {
         }
         None => {
             // SPEC-1: Fallback resolution for terminal sizing only
-            log::warn!("[TERM] SPEC-1: Using fallback resolution 1280x800 (serial mode)");
-            (1280, 800)
+            // TEAM_461: Use centralized config for fallback resolution
+            use crate::config::display::{FALLBACK_HEIGHT, FALLBACK_WIDTH};
+            log::warn!(
+                "[TERM] SPEC-1: Using fallback resolution {}x{} (serial mode)",
+                FALLBACK_WIDTH,
+                FALLBACK_HEIGHT
+            );
+            (FALLBACK_WIDTH, FALLBACK_HEIGHT)
         }
     };
 

@@ -118,6 +118,7 @@ pub fn poll() -> bool {
     let dirty = false;
 
     // TEAM_030: Get actual screen dimensions from GPU instead of hardcoding
+    // TEAM_461: Use centralized config for fallback resolution
     let (screen_width, screen_height) = {
         let gpu = crate::gpu::GPU.lock();
         if let Some(state) = gpu.as_ref() {
@@ -125,7 +126,8 @@ pub fn poll() -> bool {
             let (w, h) = state.dimensions();
             (w as i32, h as i32)
         } else {
-            (1024, 768) // Fallback if GPU not initialized
+            use crate::config::display::{FALLBACK_HEIGHT, FALLBACK_WIDTH};
+            (FALLBACK_WIDTH as i32, FALLBACK_HEIGHT as i32)
         }
     };
 

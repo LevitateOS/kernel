@@ -231,6 +231,8 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
         }
         Some(SyscallNumber::Getcwd) => fs::sys_getcwd(frame.arg0() as usize, frame.arg1() as usize),
         // TEAM_460: mkdir(pathname, mode) -> mkdirat(AT_FDCWD, pathname, mode)
+        // TEAM_461: x86_64 only - aarch64 doesn't have mkdir syscall (uses mkdirat directly)
+        #[cfg(target_arch = "x86_64")]
         Some(SyscallNumber::Mkdir) => fs::sys_mkdirat(
             -100, // AT_FDCWD
             frame.arg0() as usize,

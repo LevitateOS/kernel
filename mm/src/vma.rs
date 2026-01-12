@@ -1,6 +1,10 @@
 //! TEAM_238: Virtual Memory Area tracking for user processes.
 //!
 //! Tracks mapped regions to enable proper munmap and mprotect.
+//!
+//! TEAM_461: Optimized with binary search for O(log n) lookups.
+//! The VMA list is kept sorted by start address, enabling efficient
+//! point queries and overlap detection.
 
 extern crate alloc;
 
@@ -82,6 +86,7 @@ define_kernel_error! {
 ///
 /// Maintains a sorted list of non-overlapping VMAs.
 /// TEAM_432: Added Clone for fork() support.
+/// TEAM_461: Optimized with binary search for O(log n) lookups.
 #[derive(Debug, Default, Clone)]
 pub struct VmaList {
     /// VMAs sorted by start address
@@ -95,23 +100,67 @@ impl VmaList {
         Self { vmas: Vec::new() }
     }
 
+    /// TEAM_461: Binary search to find insertion point for a given start address.
+    /// Returns the index where a VMA with this start address should be inserted.
+    #[inline]
+    fn search_insert_point(&self, start: usize) -> usize {
+        self.vmas
+            .binary_search_by(|v| v.start.cmp(&start))
+            .unwrap_or_else(|i| i)
+    }
+
+    /// TEAM_461: Binary search to find a VMA that might contain the given address.
+    /// Returns the index of the VMA with the largest start <= addr, or None if no such VMA.
+    #[inline]
+    fn search_containing(&self, addr: usize) -> Option<usize> {
+        if self.vmas.is_empty() {
+            return None;
+        }
+
+        // Find first VMA with start > addr
+        let idx = self
+            .vmas
+            .binary_search_by(|v| {
+                if v.start <= addr {
+                    core::cmp::Ordering::Less
+                } else {
+                    core::cmp::Ordering::Greater
+                }
+            })
+            .unwrap_or_else(|i| i);
+
+        // The VMA at idx-1 (if exists) has start <= addr
+        if idx > 0 {
+            Some(idx - 1)
+        } else {
+            None
+        }
+    }
+
     /// Insert a new VMA. Returns error if it overlaps existing.
+    /// TEAM_461: Uses binary search for O(log n) insertion.
     pub fn insert(&mut self, vma: Vma) -> Result<(), VmaError> {
-        // Check for overlaps
-        for existing in &self.vmas {
-            if existing.overlaps(vma.start, vma.end) {
+        // Find insertion point using binary search
+        let pos = self.search_insert_point(vma.start);
+
+        // TEAM_461: Only need to check adjacent VMAs for overlap since list is sorted.
+        // Check VMA before insertion point (if exists) - might extend past vma.start
+        if pos > 0 {
+            let prev = &self.vmas[pos - 1];
+            if prev.overlaps(vma.start, vma.end) {
                 return Err(VmaError::Overlapping);
             }
         }
 
-        // Insert maintaining sorted order
-        let pos = self
-            .vmas
-            .iter()
-            .position(|v| v.start > vma.start)
-            .unwrap_or(self.vmas.len());
-        self.vmas.insert(pos, vma);
+        // Check VMA at insertion point (if exists) - might start before vma.end
+        if pos < self.vmas.len() {
+            let next = &self.vmas[pos];
+            if next.overlaps(vma.start, vma.end) {
+                return Err(VmaError::Overlapping);
+            }
+        }
 
+        self.vmas.insert(pos, vma);
         Ok(())
     }
 
@@ -173,15 +222,45 @@ impl VmaList {
     }
 
     /// Find VMA containing the given address.
+    /// TEAM_461: Uses binary search for O(log n) lookup.
     #[must_use]
     pub fn find(&self, addr: usize) -> Option<&Vma> {
-        self.vmas.iter().find(|v| v.contains(addr))
+        // Binary search for VMA with largest start <= addr
+        let idx = self.search_containing(addr)?;
+        let vma = &self.vmas[idx];
+
+        // Check if addr is actually within this VMA's range
+        if vma.contains(addr) {
+            Some(vma)
+        } else {
+            None
+        }
     }
 
     /// Find all VMAs overlapping the given range.
+    /// TEAM_461: Uses binary search to find starting point, then scans O(k) overlapping VMAs.
     pub fn find_overlapping(&self, start: usize, end: usize) -> Vec<&Vma> {
-        self.vmas
+        if self.vmas.is_empty() {
+            return Vec::new();
+        }
+
+        // Find first VMA that could possibly overlap: one with start < end
+        // Binary search for first VMA with start >= end (first non-overlapping on right)
+        let search_start = self
+            .vmas
+            .binary_search_by(|v| {
+                if v.end <= start {
+                    core::cmp::Ordering::Less
+                } else {
+                    core::cmp::Ordering::Greater
+                }
+            })
+            .unwrap_or_else(|i| i);
+
+        // Collect all overlapping VMAs from this point
+        self.vmas[search_start..]
             .iter()
+            .take_while(|v| v.start < end)
             .filter(|v| v.overlaps(start, end))
             .collect()
     }
@@ -264,6 +343,7 @@ impl VmaList {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::vec;
 
     #[test]
     fn test_vma_contains() {
@@ -358,5 +438,84 @@ mod tests {
         assert!(list.find(0x1500).is_some()); // Left portion
         assert!(list.find(0x2500).is_none()); // Removed
         assert!(list.find(0x3500).is_some()); // Right portion
+    }
+
+    // TEAM_461: Tests for binary search optimization
+    #[test]
+    fn test_binary_search_many_vmas() {
+        let mut list = VmaList::new();
+
+        // Insert 100 non-overlapping VMAs
+        for i in 0..100 {
+            let start = i * 0x2000;
+            let end = start + 0x1000;
+            list.insert(Vma::new(start, end, VmaFlags::READ)).unwrap();
+        }
+
+        // Verify all can be found
+        for i in 0..100 {
+            let addr = i * 0x2000 + 0x500;
+            assert!(list.find(addr).is_some(), "VMA {} not found", i);
+        }
+
+        // Verify gaps return None
+        for i in 0..100 {
+            let gap_addr = i * 0x2000 + 0x1500;
+            assert!(list.find(gap_addr).is_none(), "Gap {} incorrectly found", i);
+        }
+    }
+
+    #[test]
+    fn test_find_overlapping_many() {
+        let mut list = VmaList::new();
+
+        // Insert VMAs: [0x1000-0x2000], [0x3000-0x4000], [0x5000-0x6000], etc.
+        for i in 0..10 {
+            let start = 0x1000 + i * 0x2000;
+            let end = start + 0x1000;
+            list.insert(Vma::new(start, end, VmaFlags::READ)).unwrap();
+        }
+
+        // Range that overlaps VMAs 2, 3, 4 (0x5000-0x6000, 0x7000-0x8000, 0x9000-0xA000)
+        let overlapping = list.find_overlapping(0x5500, 0x9500);
+        assert_eq!(overlapping.len(), 3);
+
+        // Range that overlaps nothing (in a gap)
+        let overlapping = list.find_overlapping(0x2000, 0x3000);
+        assert!(overlapping.is_empty());
+
+        // Range that overlaps everything
+        let overlapping = list.find_overlapping(0x0000, 0x20000);
+        assert_eq!(overlapping.len(), 10);
+    }
+
+    #[test]
+    fn test_insert_maintains_sorted() {
+        let mut list = VmaList::new();
+
+        // Insert in random order
+        list.insert(Vma::new(0x5000, 0x6000, VmaFlags::READ)).unwrap();
+        list.insert(Vma::new(0x1000, 0x2000, VmaFlags::READ)).unwrap();
+        list.insert(Vma::new(0x9000, 0xA000, VmaFlags::READ)).unwrap();
+        list.insert(Vma::new(0x3000, 0x4000, VmaFlags::READ)).unwrap();
+
+        // Verify sorted order
+        let starts: Vec<_> = list.iter().map(|v| v.start).collect();
+        assert_eq!(starts, vec![0x1000, 0x3000, 0x5000, 0x9000]);
+    }
+
+    #[test]
+    fn test_overlap_detection_edge_cases() {
+        let mut list = VmaList::new();
+        list.insert(Vma::new(0x2000, 0x4000, VmaFlags::READ)).unwrap();
+
+        // Adjacent (should succeed - no overlap)
+        assert!(list.insert(Vma::new(0x4000, 0x5000, VmaFlags::READ)).is_ok());
+        assert!(list.insert(Vma::new(0x1000, 0x2000, VmaFlags::READ)).is_ok());
+
+        // Overlapping with existing [0x2000-0x4000] (should fail)
+        // Use page-aligned addresses
+        assert!(list.insert(Vma::new(0x3000, 0x5000, VmaFlags::READ)).is_err());
+        assert!(list.insert(Vma::new(0x0000, 0x3000, VmaFlags::READ)).is_err());
     }
 }

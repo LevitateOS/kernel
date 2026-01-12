@@ -222,6 +222,7 @@ mod aarch64_handlers {
 // Local modules that remain in levitate
 pub mod block;
 pub mod boot; // TEAM_282: Boot abstraction layer
+pub mod config; // TEAM_461: Centralized kernel configuration
 pub mod fs; // TEAM_422: Filesystem integration module
 pub mod gpu;
 pub mod init;
