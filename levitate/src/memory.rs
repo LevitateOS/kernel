@@ -67,6 +67,21 @@ pub fn init(boot_info: &BootInfo) {
         }
     }
 
+    // TEAM_466: Reserve initramfs region - stored separately from memory_map
+    // Without this, the buddy allocator can allocate over initramfs data,
+    // causing files to "appear then disappear" as memory gets corrupted.
+    if let Some(initrd) = &boot_info.initramfs {
+        let start = initrd.base;
+        let end = initrd.end();
+        log::debug!(
+            "[MEM] Reserving initramfs: 0x{:x} - 0x{:x} ({} KB)",
+            start,
+            end,
+            initrd.size / 1024
+        );
+        add_reserved(&mut reserved_regions, &mut reserved_count, start, end);
+    }
+
     if phys_min == usize::MAX || phys_max == 0 {
         log::error!("[MEM] No usable memory regions found!");
         return;

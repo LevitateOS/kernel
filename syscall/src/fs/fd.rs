@@ -4,6 +4,9 @@
 //! TEAM_415: Refactored ioctl to use helper functions.
 //! TEAM_421: Updated all functions to return SyscallResult.
 //! TEAM_422: Arc<dyn Any> downcasting for type-erased FdType handles.
+//! TEAM_466: Fixed sys_chdir to validate directory exists.
+
+extern crate alloc;
 
 use core::sync::atomic::Ordering;
 use los_fs_tty::pty::PtyPair;
@@ -16,8 +19,8 @@ use crate::{
     ioctl_write_i32, ioctl_write_u32, is_valid_fd,
 };
 use linux_raw_sys::errno::{
-    EBADF, EFAULT, EFBIG, EINVAL, EIO, EISDIR, EMFILE, ENOENT, ENOSPC, ENOSYS, ENOTTY, EROFS,
-    ESPIPE,
+    EBADF, EFAULT, EFBIG, EINVAL, EIO, EISDIR, EMFILE, ENOENT, ENOSPC, ENOSYS, ENOTDIR, ENOTTY,
+    EROFS, ESPIPE,
 };
 // TEAM_464: Import constants from linux-raw-sys (canonical source)
 use linux_raw_sys::general::{
@@ -400,18 +403,54 @@ pub fn sys_dup2(oldfd: usize, newfd: usize) -> SyscallResult {
 
 /// TEAM_404: sys_chdir - Change current working directory.
 /// TEAM_421: Updated to return SyscallResult.
+/// TEAM_466: Fixed to validate path exists and is a directory.
 ///
 /// Returns 0 on success, errno on failure.
 pub fn sys_chdir(path_ptr: usize) -> SyscallResult {
+    use los_vfs::dentry::dcache;
+    use los_vfs::error::VfsError;
+
     let task = current_task();
-    let mut path_buf = [0u8; 256];
+    // TEAM_418: Use PATH_MAX from SSOT
+    let mut path_buf = [0u8; linux_raw_sys::general::PATH_MAX as usize];
 
     let path = crate::read_user_cstring(task.ttbr0.load(Ordering::Acquire), path_ptr, &mut path_buf)?;
 
-    // Update task's cwd (assume path exists - proper validation TODO)
+    // TEAM_466: Resolve relative paths against current cwd first
+    let absolute_path = if path.starts_with('/') {
+        alloc::string::String::from(path)
+    } else {
+        let cwd = task.cwd.lock();
+        let base = cwd.trim_end_matches('/');
+        if base.is_empty() {
+            alloc::format!("/{}", path)
+        } else {
+            alloc::format!("{}/{}", base, path)
+        }
+    };
+
+    // TEAM_466: Validate the directory exists
+    let dentry = match dcache().lookup(&absolute_path) {
+        Ok(d) => d,
+        Err(VfsError::NotFound) => return Err(ENOENT),
+        Err(VfsError::NotADirectory) => return Err(ENOTDIR),
+        Err(_) => return Err(ENOENT),
+    };
+
+    // TEAM_466: Validate it's actually a directory
+    let inode = match dentry.get_inode() {
+        Some(i) => i,
+        None => return Err(ENOENT),
+    };
+
+    if !inode.is_dir() {
+        return Err(ENOTDIR);
+    }
+
+    // Update task's cwd with the validated absolute path
     let mut cwd = task.cwd.lock();
     cwd.clear();
-    cwd.push_str(path);
+    cwd.push_str(&absolute_path);
     Ok(0)
 }
 

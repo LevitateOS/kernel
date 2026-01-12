@@ -108,6 +108,7 @@ pub fn sys_linkat(
 
 /// TEAM_345: sys_symlinkat - Linux ABI compatible.
 /// TEAM_421: Updated to return SyscallResult.
+/// TEAM_466: Fixed to resolve relative paths against CWD.
 /// Signature: symlinkat(target, newdirfd, linkpath)
 pub fn sys_symlinkat(target: usize, newdirfd: i32, linkpath: usize) -> SyscallResult {
     let task = los_sched::current_task();
@@ -120,13 +121,23 @@ pub fn sys_symlinkat(target: usize, newdirfd: i32, linkpath: usize) -> SyscallRe
     let mut linkpath_buf = [0u8; linux_raw_sys::general::PATH_MAX as usize];
     let linkpath_str = read_user_cstring(task.ttbr0.load(Ordering::Acquire), linkpath, &mut linkpath_buf)?;
 
-    // TEAM_345: Handle dirfd
-    if newdirfd != AT_FDCWD && !linkpath_str.starts_with('/') {
+    // TEAM_466: Resolve relative paths against CWD for AT_FDCWD
+    let resolved_linkpath = if newdirfd == AT_FDCWD && !linkpath_str.starts_with('/') {
+        let cwd = task.cwd.lock();
+        let base = cwd.trim_end_matches('/');
+        if base.is_empty() {
+            alloc::format!("/{}", linkpath_str)
+        } else {
+            alloc::format!("{}/{}", base, linkpath_str)
+        }
+    } else if !linkpath_str.starts_with('/') && newdirfd != AT_FDCWD {
         log::warn!("[SYSCALL] symlinkat: dirfd {} not yet supported", newdirfd);
         return Err(EBADF);
-    }
+    } else {
+        alloc::string::String::from(linkpath_str)
+    };
 
-    match vfs_symlink(target_str, linkpath_str) {
+    match vfs_symlink(target_str, &resolved_linkpath) {
         Ok(()) => Ok(0),
         Err(VfsError::AlreadyExists) => Err(EEXIST),
         Err(VfsError::NotFound) => Err(ENOENT),

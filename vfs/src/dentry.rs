@@ -133,7 +133,12 @@ impl Dentry {
     }
 
     /// TEAM_202: Mount a filesystem at this dentry
+    ///
+    /// TEAM_466: Clear children cache on mount so lookups go to the mounted
+    /// filesystem, not stale cached children from the underlying filesystem.
     pub fn mount(&self, sb: Arc<dyn Superblock>) {
+        // Clear cached children - they're from the underlying fs, not the mount
+        self.children.write().clear();
         *self.mounted.write() = Some(sb);
     }
 

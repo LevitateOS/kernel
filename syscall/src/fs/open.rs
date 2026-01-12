@@ -1,3 +1,5 @@
+extern crate alloc;
+
 use core::sync::atomic::Ordering;
 use los_vfs::dispatch::*;
 use los_vfs::error::VfsError;
@@ -12,6 +14,7 @@ use los_sched::fd_table::FdType;
 /// TEAM_345: sys_openat - Linux ABI compatible.
 /// TEAM_421: Updated to return SyscallResult.
 /// TEAM_430: Apply umask to mode when creating files.
+/// TEAM_466: Fixed to resolve relative paths against CWD.
 /// Signature: openat(dirfd, pathname, flags, mode)
 ///
 /// TEAM_168: Original implementation.
@@ -25,16 +28,25 @@ pub fn sys_openat(dirfd: i32, pathname: usize, flags: u32, mode: u32) -> Syscall
     let mut path_buf = [0u8; linux_raw_sys::general::PATH_MAX as usize];
     let path_str = read_user_cstring(task.ttbr0.load(Ordering::Acquire), pathname, &mut path_buf)?;
 
-    // TEAM_345: Handle dirfd (AT_FDCWD means use cwd)
-    // For now, we only support AT_FDCWD - relative paths with other dirfd not yet implemented
-    if dirfd != AT_FDCWD && !path_str.starts_with('/') {
-        // TODO(TEAM_345): Implement dirfd-relative path resolution
+    // TEAM_466: Resolve relative paths against CWD for AT_FDCWD
+    let resolved_path = if dirfd == AT_FDCWD && !path_str.starts_with('/') {
+        let cwd = task.cwd.lock();
+        let base = cwd.trim_end_matches('/');
+        if base.is_empty() {
+            alloc::format!("/{}", path_str)
+        } else {
+            alloc::format!("{}/{}", base, path_str)
+        }
+    } else if !path_str.starts_with('/') && dirfd != AT_FDCWD {
+        // TEAM_345: Handle dirfd (non-AT_FDCWD with relative path not yet supported)
         log::warn!(
             "[SYSCALL] openat: dirfd {} not yet supported for relative paths",
             dirfd
         );
         return Err(EBADF);
-    }
+    } else {
+        alloc::string::String::from(path_str)
+    };
 
     // TEAM_247: Handle PTY devices
     if path_str == "/dev/ptmx" {
@@ -63,10 +75,11 @@ pub fn sys_openat(dirfd: i32, pathname: usize, flags: u32, mode: u32) -> Syscall
 
     // TEAM_205: All paths now go through generic vfs_open
     // TEAM_430: Apply umask when creating files (mode & ~umask)
+    // TEAM_466: Use resolved_path which includes CWD resolution
     let vfs_flags = OpenFlags::new(flags);
     let umask = task.umask.load(Ordering::Acquire);
     let effective_mode = mode & !umask;
-    match vfs_open(path_str, vfs_flags, effective_mode) {
+    match vfs_open(&resolved_path, vfs_flags, effective_mode) {
         Ok(file) => {
             let mut fd_table = task.fd_table.lock();
             match fd_table.alloc(FdType::VfsFile(file)) {
@@ -86,13 +99,13 @@ pub fn sys_openat(dirfd: i32, pathname: usize, flags: u32, mode: u32) -> Syscall
 
 /// TEAM_168: sys_close - Close a file descriptor.
 /// TEAM_421: Updated to return SyscallResult.
+/// TEAM_467: Allow closing fd 0/1/2 - BusyBox uniq closes stdin to reopen file at fd 0.
 pub fn sys_close(fd: usize) -> SyscallResult {
     let task = los_sched::current_task();
     let mut fd_table = task.fd_table.lock();
 
-    if fd < 3 {
-        return Err(EINVAL);
-    }
+    // TEAM_467: Remove check for fd < 3. Programs like BusyBox uniq close stdin (fd 0)
+    // and reopen a file to reuse the fd slot. This is a valid POSIX pattern.
 
     if fd_table.close(fd) {
         Ok(0)

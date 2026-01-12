@@ -131,16 +131,28 @@ pub fn sys_read(fd: usize, buf: usize, len: usize) -> SyscallResult {
                 return Err(EFAULT);
             }
             let mut kbuf = alloc::vec![0u8; len];
-            // TEAM_421: Pipe now returns Result<usize, u32> directly
-            let n = pipe.read(&mut kbuf)?;
-            let dest = match mm_user::user_va_to_kernel_ptr(ttbr0, buf) {
-                Some(p) => p,
-                None => return Err(EFAULT),
-            };
-            unsafe {
-                core::ptr::copy_nonoverlapping(kbuf.as_ptr(), dest, n);
+            // TEAM_466: Block until data available or write end closes (POSIX behavior).
+            // Without blocking, the shell gets EAGAIN and may hang in a retry loop.
+            loop {
+                match pipe.read(&mut kbuf) {
+                    Ok(n) => {
+                        // Got data or EOF (n=0 when write end closed)
+                        let dest = match mm_user::user_va_to_kernel_ptr(ttbr0, buf) {
+                            Some(p) => p,
+                            None => return Err(EFAULT),
+                        };
+                        unsafe {
+                            core::ptr::copy_nonoverlapping(kbuf.as_ptr(), dest, n);
+                        }
+                        return Ok(n as i64);
+                    }
+                    Err(linux_raw_sys::errno::EAGAIN) => {
+                        // No data yet, write end still open - yield and retry
+                        los_sched::yield_now();
+                    }
+                    Err(e) => return Err(e),
+                }
             }
-            Ok(n as i64)
         }
         FdType::PtyMaster(ref pair_any) => {
             #[cfg(feature = "verbose-syscalls")]

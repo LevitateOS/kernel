@@ -78,6 +78,10 @@ pub enum SyscallNumber {
     Getcwd = 79,
     Chdir = 80,    // TEAM_404: Change directory
     Fchdir = 81,   // TEAM_404: Change directory by fd
+    Rename = 82,   // TEAM_466: Legacy rename() for BusyBox mv
+    Rmdir = 84,    // TEAM_466: Legacy rmdir() for BusyBox rmdir
+    Unlink = 87,   // TEAM_466: Legacy unlink() for BusyBox rm
+    Symlink = 88,  // TEAM_466: Legacy symlink() for BusyBox ln -s
     GetPpid = 110, // x86: getppid=110
     Mount = 165,
     Umount = 166,
@@ -219,6 +223,10 @@ impl SyscallNumber {
             79 => Some(Self::Getcwd),
             80 => Some(Self::Chdir),  // TEAM_404
             81 => Some(Self::Fchdir), // TEAM_404
+            82 => Some(Self::Rename), // TEAM_466
+            84 => Some(Self::Rmdir),  // TEAM_466
+            87 => Some(Self::Unlink), // TEAM_466
+            88 => Some(Self::Symlink), // TEAM_466
             110 => Some(Self::GetPpid),
             165 => Some(Self::Mount),
             166 => Some(Self::Umount),

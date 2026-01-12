@@ -18,15 +18,27 @@ use los_types::{S_IFDIR, S_IFREG, Stat};
 /// TEAM_202: Open a file by path
 ///
 /// Resolves the path, checks permissions, and returns an open file handle.
+/// TEAM_466: Now follows symlinks unless O_NOFOLLOW is set.
 pub fn vfs_open(path: &str, flags: OpenFlags, create_mode: u32) -> VfsResult<FileRef> {
     // Handle O_CREAT
     if flags.is_create() {
         return vfs_open_create(path, flags, create_mode);
     }
 
-    // Look up the path
-    let dentry = dcache().lookup(path)?;
-    let inode = dentry.get_inode().ok_or(VfsError::NotFound)?;
+    // TEAM_466: Follow symlinks unless O_NOFOLLOW is set
+    let inode = if flags.is_nofollow() {
+        // Don't follow symlinks - get the symlink inode itself
+        let dentry = dcache().lookup(path)?;
+        let inode = dentry.get_inode().ok_or(VfsError::NotFound)?;
+        // O_NOFOLLOW with a symlink should return ELOOP
+        if inode.is_symlink() {
+            return Err(VfsError::TooManySymlinks);
+        }
+        inode
+    } else {
+        // Follow symlinks to get the final target
+        resolve_symlinks(path)?
+    };
 
     // Check O_DIRECTORY
     if flags.is_directory() && !inode.is_dir() {
@@ -42,16 +54,31 @@ pub fn vfs_open(path: &str, flags: OpenFlags, create_mode: u32) -> VfsResult<Fil
 }
 
 /// TEAM_202: Open with O_CREAT flag
+/// TEAM_466: Now follows symlinks when file exists unless O_NOFOLLOW is set.
 fn vfs_open_create(path: &str, flags: OpenFlags, create_mode: u32) -> VfsResult<FileRef> {
-    // Try to look up first
-    match dcache().lookup(path) {
-        Ok(dentry) => {
+    // Try to look up first (following symlinks if needed)
+    // TEAM_466: Use resolve_symlinks for existing files, unless O_NOFOLLOW
+    let lookup_result = if flags.is_nofollow() {
+        dcache().lookup(path).map(|d| {
+            let inode = d.get_inode();
+            // O_NOFOLLOW + O_CREAT on existing symlink = ELOOP
+            if let Some(ref i) = inode {
+                if i.is_symlink() {
+                    return Err(VfsError::TooManySymlinks);
+                }
+            }
+            Ok(inode)
+        }).and_then(|r| r)
+    } else {
+        resolve_symlinks(path).map(Some)
+    };
+
+    match lookup_result {
+        Ok(Some(inode)) => {
             // File exists
             if flags.is_exclusive() {
                 return Err(VfsError::AlreadyExists);
             }
-
-            let inode = dentry.get_inode().ok_or(VfsError::NotFound)?;
 
             if flags.is_directory() && !inode.is_dir() {
                 return Err(VfsError::NotADirectory);
@@ -63,7 +90,7 @@ fn vfs_open_create(path: &str, flags: OpenFlags, create_mode: u32) -> VfsResult<
 
             Ok(Arc::new(File::new(inode, flags)))
         }
-        Err(VfsError::NotFound) => {
+        Ok(None) | Err(VfsError::NotFound) => {
             // Need to create the file
             let (parent_dentry, name) = dcache().lookup_parent(path)?;
             let parent_inode = parent_dentry.get_inode().ok_or(VfsError::NotFound)?;

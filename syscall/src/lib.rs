@@ -258,6 +258,35 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
             frame.arg2() as i32,
             frame.arg3() as usize,
         ),
+        // TEAM_466: Legacy rename(oldpath, newpath) - maps to renameat(AT_FDCWD, ...)
+        #[cfg(target_arch = "x86_64")]
+        Some(SyscallNumber::Rename) => fs::sys_renameat(
+            linux_raw_sys::general::AT_FDCWD,
+            frame.arg0() as usize,
+            linux_raw_sys::general::AT_FDCWD,
+            frame.arg1() as usize,
+        ),
+        // TEAM_466: Legacy unlink(pathname) - maps to unlinkat(AT_FDCWD, pathname, 0)
+        #[cfg(target_arch = "x86_64")]
+        Some(SyscallNumber::Unlink) => fs::sys_unlinkat(
+            linux_raw_sys::general::AT_FDCWD,
+            frame.arg0() as usize,
+            0, // flags = 0 for unlink (not rmdir)
+        ),
+        // TEAM_466: Legacy rmdir(pathname) - maps to unlinkat(AT_FDCWD, pathname, AT_REMOVEDIR)
+        #[cfg(target_arch = "x86_64")]
+        Some(SyscallNumber::Rmdir) => fs::sys_unlinkat(
+            linux_raw_sys::general::AT_FDCWD,
+            frame.arg0() as usize,
+            linux_raw_sys::general::AT_REMOVEDIR,
+        ),
+        // TEAM_466: Legacy symlink(target, linkpath) - maps to symlinkat(target, AT_FDCWD, linkpath)
+        #[cfg(target_arch = "x86_64")]
+        Some(SyscallNumber::Symlink) => fs::sys_symlinkat(
+            frame.arg0() as usize, // target
+            linux_raw_sys::general::AT_FDCWD,
+            frame.arg1() as usize, // linkpath
+        ),
         // TEAM_345: Linux ABI - utimensat(dirfd, pathname, times, flags)
         Some(SyscallNumber::Utimensat) => fs::sys_utimensat(
             frame.arg0() as i32,

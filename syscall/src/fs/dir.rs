@@ -137,6 +137,7 @@ pub fn sys_getcwd(buf: usize, size: usize) -> SyscallResult {
 /// TEAM_345: sys_mkdirat - Linux ABI compatible.
 /// TEAM_421: Updated to return SyscallResult.
 /// TEAM_430: Apply umask to mode when creating directories.
+/// TEAM_466: Fixed to resolve relative paths against CWD.
 /// Signature: mkdirat(dirfd, pathname, mode)
 pub fn sys_mkdirat(dirfd: i32, pathname: usize, mode: u32) -> SyscallResult {
     use core::sync::atomic::Ordering;
@@ -146,16 +147,26 @@ pub fn sys_mkdirat(dirfd: i32, pathname: usize, mode: u32) -> SyscallResult {
     let mut path_buf = [0u8; linux_raw_sys::general::PATH_MAX as usize];
     let path_str = crate::read_user_cstring(task.ttbr0.load(Ordering::Acquire), pathname, &mut path_buf)?;
 
-    // TEAM_345: Handle dirfd
-    if dirfd != AT_FDCWD && !path_str.starts_with('/') {
+    // TEAM_466: Resolve relative paths against CWD for AT_FDCWD
+    let resolved_path = if dirfd == AT_FDCWD && !path_str.starts_with('/') {
+        let cwd = task.cwd.lock();
+        let base = cwd.trim_end_matches('/');
+        if base.is_empty() {
+            alloc::format!("/{}", path_str)
+        } else {
+            alloc::format!("{}/{}", base, path_str)
+        }
+    } else if !path_str.starts_with('/') && dirfd != AT_FDCWD {
         log::warn!("[SYSCALL] mkdirat: dirfd {} not yet supported", dirfd);
         return Err(EBADF);
-    }
+    } else {
+        alloc::string::String::from(path_str)
+    };
 
     // TEAM_460: Handle root directory specially for mkdir -p support
     // When path is "/" (or "//" etc.), root already exists, return EEXIST
     // This allows mkdir -p to continue without error
-    let normalized_path = path_str.trim_end_matches('/');
+    let normalized_path = resolved_path.trim_end_matches('/');
     if normalized_path.is_empty() {
         return Err(EEXIST);
     }
@@ -164,7 +175,7 @@ pub fn sys_mkdirat(dirfd: i32, pathname: usize, mode: u32) -> SyscallResult {
     let umask = task.umask.load(Ordering::Acquire);
     let effective_mode = mode & !umask;
     // TEAM_465: Improve error mapping for mkdir syscall
-    match vfs_mkdir(path_str, effective_mode) {
+    match vfs_mkdir(&resolved_path, effective_mode) {
         Ok(()) => Ok(0),
         Err(VfsError::AlreadyExists) => Err(EEXIST),
         Err(VfsError::NotFound) => Err(ENOENT),
@@ -180,6 +191,7 @@ pub fn sys_mkdirat(dirfd: i32, pathname: usize, mode: u32) -> SyscallResult {
 
 /// TEAM_345: sys_unlinkat - Linux ABI compatible.
 /// TEAM_421: Updated to return SyscallResult.
+/// TEAM_466: Fixed to resolve relative paths against CWD.
 /// Signature: unlinkat(dirfd, pathname, flags)
 pub fn sys_unlinkat(dirfd: i32, pathname: usize, flags: u32) -> SyscallResult {
     let task = los_sched::current_task();
@@ -188,16 +200,26 @@ pub fn sys_unlinkat(dirfd: i32, pathname: usize, flags: u32) -> SyscallResult {
     let mut path_buf = [0u8; linux_raw_sys::general::PATH_MAX as usize];
     let path_str = crate::read_user_cstring(task.ttbr0.load(Ordering::Acquire), pathname, &mut path_buf)?;
 
-    // TEAM_345: Handle dirfd
-    if dirfd != AT_FDCWD && !path_str.starts_with('/') {
+    // TEAM_466: Resolve relative paths against CWD for AT_FDCWD
+    let resolved_path = if dirfd == AT_FDCWD && !path_str.starts_with('/') {
+        let cwd = task.cwd.lock();
+        let base = cwd.trim_end_matches('/');
+        if base.is_empty() {
+            alloc::format!("/{}", path_str)
+        } else {
+            alloc::format!("{}/{}", base, path_str)
+        }
+    } else if !path_str.starts_with('/') && dirfd != AT_FDCWD {
         log::warn!("[SYSCALL] unlinkat: dirfd {} not yet supported", dirfd);
         return Err(EBADF);
-    }
+    } else {
+        alloc::string::String::from(path_str)
+    };
 
     let res = if (flags & AT_REMOVEDIR) != 0 {
-        vfs_rmdir(path_str)
+        vfs_rmdir(&resolved_path)
     } else {
-        vfs_unlink(path_str)
+        vfs_unlink(&resolved_path)
     };
 
     match res {
@@ -211,6 +233,7 @@ pub fn sys_unlinkat(dirfd: i32, pathname: usize, flags: u32) -> SyscallResult {
 
 /// TEAM_345: sys_renameat - Linux ABI compatible.
 /// TEAM_421: Updated to return SyscallResult.
+/// TEAM_466: Fixed to resolve relative paths against CWD.
 /// Signature: renameat(olddirfd, oldpath, newdirfd, newpath)
 pub fn sys_renameat(olddirfd: i32, oldpath: usize, newdirfd: i32, newpath: usize) -> SyscallResult {
     let task = los_sched::current_task();
@@ -223,15 +246,38 @@ pub fn sys_renameat(olddirfd: i32, oldpath: usize, newdirfd: i32, newpath: usize
     let mut new_path_buf = [0u8; linux_raw_sys::general::PATH_MAX as usize];
     let new_path_str = crate::read_user_cstring(task.ttbr0.load(Ordering::Acquire), newpath, &mut new_path_buf)?;
 
-    // TEAM_345: Handle dirfd
-    if (olddirfd != AT_FDCWD && !old_path_str.starts_with('/'))
-        || (newdirfd != AT_FDCWD && !new_path_str.starts_with('/'))
-    {
-        log::warn!("[SYSCALL] renameat: dirfd not yet supported");
+    // TEAM_466: Resolve relative paths against CWD for AT_FDCWD
+    let resolved_old = if olddirfd == AT_FDCWD && !old_path_str.starts_with('/') {
+        let cwd = task.cwd.lock();
+        let base = cwd.trim_end_matches('/');
+        if base.is_empty() {
+            alloc::format!("/{}", old_path_str)
+        } else {
+            alloc::format!("{}/{}", base, old_path_str)
+        }
+    } else if !old_path_str.starts_with('/') && olddirfd != AT_FDCWD {
+        log::warn!("[SYSCALL] renameat: olddirfd {} not yet supported", olddirfd);
         return Err(EBADF);
-    }
+    } else {
+        alloc::string::String::from(old_path_str)
+    };
 
-    match vfs_rename(old_path_str, new_path_str) {
+    let resolved_new = if newdirfd == AT_FDCWD && !new_path_str.starts_with('/') {
+        let cwd = task.cwd.lock();
+        let base = cwd.trim_end_matches('/');
+        if base.is_empty() {
+            alloc::format!("/{}", new_path_str)
+        } else {
+            alloc::format!("{}/{}", base, new_path_str)
+        }
+    } else if !new_path_str.starts_with('/') && newdirfd != AT_FDCWD {
+        log::warn!("[SYSCALL] renameat: newdirfd {} not yet supported", newdirfd);
+        return Err(EBADF);
+    } else {
+        alloc::string::String::from(new_path_str)
+    };
+
+    match vfs_rename(&resolved_old, &resolved_new) {
         Ok(()) => Ok(0),
         Err(VfsError::NotFound) => Err(ENOENT),
         Err(VfsError::NotADirectory) => Err(ENOTDIR),
