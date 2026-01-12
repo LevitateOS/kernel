@@ -519,7 +519,8 @@ fn spawn_init() -> bool {
     };
 
     // TEAM_121: Spawn init and let the scheduler take over.
-    match crate::process::spawn_from_elf(elf_data, crate::task::fd_table::new_shared_fd_table()) {
+    // TEAM_453: Use fd table with stdin/stdout/stderr for BusyBox init
+    match crate::process::spawn_from_elf(elf_data, crate::task::fd_table::new_shared_fd_table_with_stdio()) {
         Ok(task) => {
             let tcb = Arc::new(TaskControlBlock::from(task));
             task::scheduler::SCHEDULER.add_task(tcb);

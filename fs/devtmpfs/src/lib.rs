@@ -36,7 +36,7 @@ pub static DEVTMPFS: Mutex<Option<Arc<Devtmpfs>>> = Mutex::new(None);
 
 /// TEAM_431: Initialize the devtmpfs with standard device nodes
 pub fn init() {
-    use devices::devno::*;
+    use devices::devno::{MEM_MAJOR, NULL_MINOR, ZERO_MINOR, FULL_MINOR, URANDOM_MINOR, TTY_MAJOR, CONSOLE_MINOR};
     use devices::makedev;
 
     // Register built-in device drivers
@@ -50,6 +50,8 @@ pub fn init() {
     devtmpfs.create_device("zero", makedev(MEM_MAJOR, ZERO_MINOR));
     devtmpfs.create_device("full", makedev(MEM_MAJOR, FULL_MINOR));
     devtmpfs.create_device("urandom", makedev(MEM_MAJOR, URANDOM_MINOR));
+    // TEAM_453: Console device for BusyBox init
+    devtmpfs.create_device("console", makedev(TTY_MAJOR, CONSOLE_MINOR));
 
     // Create /dev/pts directory for future PTY support
     devtmpfs.create_directory("pts");
@@ -63,7 +65,7 @@ pub fn init() {
 
     *DEVTMPFS.lock() = Some(devtmpfs);
 
-    log::info!("[DEVTMPFS] Initialized with null, zero, full, urandom devices");
+    log::info!("[DEVTMPFS] Initialized with null, zero, full, urandom, console devices");
 }
 
 /// TEAM_431: Get uptime in seconds for timestamps (cross-platform).

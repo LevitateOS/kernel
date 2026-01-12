@@ -10,10 +10,47 @@ pub mod shutdown_flags {
     pub const VERBOSE: u32 = 1;
 }
 
-/// TEAM_142: sys_shutdown - Graceful system shutdown.
+/// TEAM_453: Linux reboot command constants
+pub mod reboot_cmd {
+    pub const LINUX_REBOOT_CMD_RESTART: u32 = 0x01234567;
+    pub const LINUX_REBOOT_CMD_HALT: u32 = 0xcdef0123;
+    pub const LINUX_REBOOT_CMD_CAD_ON: u32 = 0x89abcdef;
+    pub const LINUX_REBOOT_CMD_CAD_OFF: u32 = 0x00000000;
+    pub const LINUX_REBOOT_CMD_POWER_OFF: u32 = 0x4321fedc;
+}
+
+/// TEAM_142: sys_shutdown - Handle Linux reboot syscall.
 /// TEAM_421: Returns SyscallResult
-pub fn sys_shutdown(flags: u32) -> SyscallResult {
-    let verbose = flags & shutdown_flags::VERBOSE != 0;
+/// TEAM_453: Fixed to check cmd argument - not all reboot calls mean shutdown!
+///
+/// Linux reboot(2) args: magic1, magic2, cmd, arg
+/// - CAD_OFF (0): Disable Ctrl+Alt+Del - just return success
+/// - CAD_ON: Enable Ctrl+Alt+Del - just return success  
+/// - HALT/POWER_OFF/RESTART: Actually shutdown
+pub fn sys_shutdown(cmd: u32) -> SyscallResult {
+    use reboot_cmd::*;
+    
+    match cmd {
+        LINUX_REBOOT_CMD_CAD_OFF => {
+            // TEAM_453: BusyBox init calls this to disable Ctrl+Alt+Del
+            // Just acknowledge and return success - don't shutdown!
+            log::trace!("[REBOOT] CAD_OFF - Ctrl+Alt+Del disabled");
+            return Ok(0);
+        }
+        LINUX_REBOOT_CMD_CAD_ON => {
+            log::trace!("[REBOOT] CAD_ON - Ctrl+Alt+Del enabled");
+            return Ok(0);
+        }
+        LINUX_REBOOT_CMD_RESTART | LINUX_REBOOT_CMD_HALT | LINUX_REBOOT_CMD_POWER_OFF => {
+            // These actually mean shutdown
+            log::info!("[SHUTDOWN] Initiating graceful shutdown (cmd=0x{:x})...", cmd);
+        }
+        _ => {
+            log::warn!("[REBOOT] Unknown cmd=0x{:x}, treating as shutdown", cmd);
+        }
+    }
+    
+    let verbose = true;
     log::info!("[SHUTDOWN] Initiating graceful shutdown...");
 
     if verbose {

@@ -5,6 +5,7 @@
 
 extern crate alloc;
 
+pub mod console;
 pub mod full;
 pub mod null;
 pub mod urandom;
@@ -26,6 +27,11 @@ pub mod devno {
     pub const FULL_MINOR: u32 = 7;
     /// /dev/urandom minor
     pub const URANDOM_MINOR: u32 = 9;
+    
+    /// TEAM_453: TTY devices major number
+    pub const TTY_MAJOR: u32 = 5;
+    /// /dev/console minor
+    pub const CONSOLE_MINOR: u32 = 1;
 }
 
 /// Encode major:minor into rdev (Linux makedev format)
@@ -92,4 +98,6 @@ pub fn register_builtin_devices() {
     register_char_device(MEM_MAJOR, ZERO_MINOR, &zero::ZERO_DEVICE);
     register_char_device(MEM_MAJOR, FULL_MINOR, &full::FULL_DEVICE);
     register_char_device(MEM_MAJOR, URANDOM_MINOR, &urandom::URANDOM_DEVICE);
+    // TEAM_453: Console device for BusyBox init
+    register_char_device(TTY_MAJOR, CONSOLE_MINOR, &console::CONSOLE_DEVICE);
 }

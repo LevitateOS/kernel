@@ -52,7 +52,7 @@ pub type SyscallResult = Result<i64, u32>;
 
 pub fn syscall_dispatch(frame: &mut SyscallFrame) {
     let nr = frame.syscall_number();
-
+    
     let result = match SyscallNumber::from_u64(nr) {
         Some(SyscallNumber::Read) => fs::sys_read(
             frame.arg0() as usize,
@@ -78,7 +78,8 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
             frame,
         ),
         Some(SyscallNumber::Yield) => process::sys_yield(),
-        Some(SyscallNumber::Shutdown) => sys::sys_shutdown(frame.arg0() as u32),
+        // TEAM_453: Linux reboot(magic1, magic2, cmd, arg) - pass cmd (arg2)
+        Some(SyscallNumber::Shutdown) => sys::sys_shutdown(frame.arg2() as u32),
         // TEAM_444: Legacy open() - translates to openat(AT_FDCWD, ...)
         // TEAM_446: x86_64 only - aarch64 doesn't have open() syscall
         #[cfg(target_arch = "x86_64")]
@@ -315,6 +316,16 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
             frame,
         ),
         Some(SyscallNumber::SetTidAddress) => process::sys_set_tid_address(frame.arg0() as usize),
+        // TEAM_453: vfork - BusyBox init uses this to spawn ash shell
+        // True vfork shares address space (CLONE_VM), but that requires blocking
+        // the parent until child execs. For now, use fork semantics (full copy)
+        // which is safer and works correctly even if less efficient.
+        #[cfg(target_arch = "x86_64")]
+        Some(SyscallNumber::Vfork) => {
+            const SIGCHLD: u32 = 17;
+            // Fork semantics: no CLONE_VM, just SIGCHLD for child termination signal
+            process::sys_clone(SIGCHLD, 0, 0, 0, 0, frame)
+        }
         // TEAM_233: Pipe and dup syscalls
         Some(SyscallNumber::Dup) => fs::sys_dup(frame.arg0() as usize),
         Some(SyscallNumber::Dup3) => fs::sys_dup3(

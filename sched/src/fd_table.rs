@@ -252,3 +252,16 @@ pub type SharedFdTable = Arc<IrqSafeLock<FdTable>>;
 pub fn new_shared_fd_table() -> SharedFdTable {
     Arc::new(IrqSafeLock::new(FdTable::new()))
 }
+
+/// TEAM_453: Create a shared fd table with stdin/stdout/stderr pre-opened.
+/// This is required for BusyBox init which expects fd 0,1,2 to be valid.
+pub fn new_shared_fd_table_with_stdio() -> SharedFdTable {
+    let mut table = FdTable::new();
+    // Allocate fd 0 = stdin
+    table.alloc(FdType::Stdin);
+    // Allocate fd 1 = stdout
+    table.alloc(FdType::Stdout);
+    // Allocate fd 2 = stderr
+    table.alloc(FdType::Stderr);
+    Arc::new(IrqSafeLock::new(table))
+}

@@ -88,6 +88,20 @@ pub fn try_wait(pid: Pid) -> Option<i32> {
     table.get(&pid).and_then(|e| e.exit_code)
 }
 
+/// TEAM_453: Try to find any exited child process.
+///
+/// Used by waitpid(-1) to wait for any child.
+/// Returns (pid, exit_code) of first exited child found.
+pub fn try_wait_any() -> Option<(usize, i32)> {
+    let table = PROCESS_TABLE.lock();
+    for (pid, entry) in table.iter() {
+        if let Some(exit_code) = entry.exit_code {
+            return Some((*pid, exit_code));
+        }
+    }
+    None
+}
+
 /// TEAM_188: Check if a process exists in the table.
 /// TEAM_191: Reserved for waitpid validation and future process queries
 #[allow(dead_code)]

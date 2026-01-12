@@ -606,14 +606,30 @@ pub fn sys_spawn_args(
 
 /// TEAM_188: sys_waitpid - Wait for a child process to exit.
 /// TEAM_414: Refactored to use write_exit_status helper.
+/// TEAM_453: Added support for pid=-1 (wait for any child) for BusyBox init.
 pub fn sys_waitpid(pid: i32, status_ptr: usize) -> SyscallResult {
+    let current = los_sched::current_task();
+
+    // TEAM_453: Handle pid=-1 (wait for any child)
+    if pid == -1 {
+        // Try to find any exited child
+        if let Some((child_pid, exit_code)) = los_sched::process_table::try_wait_any() {
+            let _ = write_exit_status(current.ttbr0, status_ptr, exit_code);
+            los_sched::process_table::reap_zombie(child_pid);
+            return Ok(child_pid as i64);
+        }
+        // No exited children yet - for now return ECHILD
+        // TODO: Block and wait for any child to exit
+        return Err(ECHILD);
+    }
+
     if pid <= 0 {
-        // For now, only support specific PID
+        // pid=0 means wait for any child in same process group (not supported)
+        // pid<-1 means wait for any child in process group |pid| (not supported)
         return Err(EINVAL);
     }
 
     let pid = pid as usize;
-    let current = los_sched::current_task();
 
     // Check if child already exited
     if let Some(exit_code) = los_sched::process_table::try_wait(pid) {
