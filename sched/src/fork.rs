@@ -56,9 +56,15 @@ pub fn create_fork(tf: &SyscallFrame) -> Result<Arc<TaskControlBlock>, ForkError
     log::info!("[FORK] Creating fork of PID={}", parent.id.0);
 
     // TEAM_454: Debug - log parent frame values to diagnose fork issues
+    #[cfg(target_arch = "x86_64")]
     log::info!(
         "[FORK] Parent frame: rcx=0x{:x}, rsp=0x{:x}, rax=0x{:x}",
         tf.rcx, tf.rsp, tf.rax
+    );
+    #[cfg(target_arch = "aarch64")]
+    log::info!(
+        "[FORK] Parent frame: pc=0x{:x}, sp=0x{:x}",
+        tf.pc, tf.sp
     );
 
     // 1. Clone VMA list from parent (needed for address space copy)
@@ -98,13 +104,22 @@ pub fn create_fork(tf: &SyscallFrame) -> Result<Arc<TaskControlBlock>, ForkError
     }
 
     // TEAM_454: Debug - verify child frame was written correctly
+    #[cfg(target_arch = "x86_64")]
     log::info!(
         "[FORK] Child frame at 0x{:x}: rcx=0x{:x}, rsp=0x{:x}",
         child_frame_addr,
         child_frame.rcx,
         child_frame.rsp
     );
+    #[cfg(target_arch = "aarch64")]
+    log::info!(
+        "[FORK] Child frame at 0x{:x}: pc=0x{:x}, sp=0x{:x}",
+        child_frame_addr,
+        child_frame.pc,
+        child_frame.sp
+    );
     // TEAM_454: Read back the frame to verify it was written correctly
+    #[cfg(target_arch = "x86_64")]
     unsafe {
         let ptr = child_frame_addr as *const SyscallFrame;
         let readback = &*ptr;
@@ -113,6 +128,16 @@ pub fn create_fork(tf: &SyscallFrame) -> Result<Arc<TaskControlBlock>, ForkError
             readback.rcx,
             readback.rsp,
             readback.rax
+        );
+    }
+    #[cfg(target_arch = "aarch64")]
+    unsafe {
+        let ptr = child_frame_addr as *const SyscallFrame;
+        let readback = &*ptr;
+        log::info!(
+            "[FORK] Frame readback: pc=0x{:x}, sp=0x{:x}",
+            readback.pc,
+            readback.sp
         );
     }
 
@@ -126,12 +151,19 @@ pub fn create_fork(tf: &SyscallFrame) -> Result<Arc<TaskControlBlock>, ForkError
     // We want exception_return to restore from the SyscallFrame we just set up
     let mut context = Context::new(child_frame_addr, exception_return as *const () as usize);
 
-    // TEAM_454: Debug - verify Context.rsp is set correctly
+    // TEAM_454: Debug - verify Context.sp is set correctly
+    #[cfg(target_arch = "x86_64")]
     log::info!(
         "[FORK] Context setup: rsp=0x{:x}, rip=0x{:x}, rbx=0x{:x}",
         context.rsp,
         context.rip,
         context.rbx
+    );
+    #[cfg(target_arch = "aarch64")]
+    log::info!(
+        "[FORK] Context setup: sp=0x{:x}, lr=0x{:x}",
+        context.sp,
+        context.lr
     );
 
     // Copy TLS from parent (child inherits TLS pointer)

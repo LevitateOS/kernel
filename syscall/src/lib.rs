@@ -50,7 +50,55 @@ pub use types::{Timespec, Timeval};
 /// This eliminates scattered `-(ERRNO as i64)` casts throughout syscall code.
 pub type SyscallResult = Result<i64, u32>;
 
+/// TEAM_459: Verify task.ttbr0 matches actual CR3/TTBR0 register (GOTCHA #37).
+///
+/// This catches bugs where someone switched page tables without updating task.ttbr0,
+/// which would cause mmap to scan the wrong page table (see TEAM_456).
+///
+/// Only compiled in debug builds to avoid runtime overhead in release.
+#[cfg(debug_assertions)]
+fn verify_ttbr0_consistency() {
+    use core::sync::atomic::Ordering;
+
+    let task = los_sched::current_task();
+    let stored_ttbr0 = task.ttbr0.load(Ordering::Acquire);
+
+    // Skip check for kernel-only tasks (ttbr0 == 0)
+    if stored_ttbr0 == 0 {
+        return;
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    let actual_ttbr0: usize = {
+        let cr3: usize;
+        // SAFETY: Reading CR3 is safe and doesn't modify state
+        unsafe { core::arch::asm!("mov {}, cr3", out(reg) cr3, options(nomem, nostack)) };
+        cr3
+    };
+
+    #[cfg(target_arch = "aarch64")]
+    let actual_ttbr0: usize = {
+        let ttbr0: usize;
+        // SAFETY: Reading TTBR0_EL1 is safe and doesn't modify state
+        unsafe { core::arch::asm!("mrs {}, ttbr0_el1", out(reg) ttbr0, options(nomem, nostack)) };
+        ttbr0
+    };
+
+    debug_assert_eq!(
+        stored_ttbr0, actual_ttbr0,
+        "GOTCHA #37: task.ttbr0 (0x{:x}) doesn't match actual CR3/TTBR0 (0x{:x})! \
+         Did you forget to update task.ttbr0 after switching page tables? \
+         See TEAM_456 for context.",
+        stored_ttbr0, actual_ttbr0
+    );
+}
+
 pub fn syscall_dispatch(frame: &mut SyscallFrame) {
+    // TEAM_459: Debug assertion to catch ttbr0/CR3 desync bugs (see GOTCHA #37)
+    // If this fires, someone switched page tables without updating task.ttbr0
+    #[cfg(debug_assertions)]
+    verify_ttbr0_consistency();
+
     let nr = frame.syscall_number();
 
     // TEAM_456: Debug logging for all syscalls

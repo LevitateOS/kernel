@@ -148,7 +148,8 @@ mod aarch64_handlers {
         action: &los_sched::SignalAction,
         task: &los_sched::TaskControlBlock,
     ) {
-        let ttbr0 = task.ttbr0;
+        // TEAM_459: Use .load() since ttbr0 is now AtomicUsize (TEAM_456)
+        let ttbr0 = task.ttbr0.load(core::sync::atomic::Ordering::Acquire);
 
         // Calculate signal frame size (SyscallFrame + padding for alignment)
         let frame_size = core::mem::size_of::<SyscallFrame>();

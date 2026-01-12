@@ -37,6 +37,17 @@ pub fn alloc_zero_map_page(
 ///
 /// Maps a page in the user's TTBR0 page table.
 ///
+/// # WARNING: VMA Tracking Required (GOTCHA #38)
+///
+/// This function ONLY updates the page table. It does NOT track the mapping
+/// in the process's VMA list. Callers MUST ensure VMA tracking is performed
+/// separately, otherwise:
+/// - `fork()` will not copy the mapped pages (see TEAM_455)
+/// - `munmap()` will not know about the mapping
+///
+/// For allocating new anonymous mappings, prefer using the higher-level
+/// mmap syscall implementation which handles VMA tracking automatically.
+///
 /// # Arguments
 /// * `ttbr0_phys` - Physical address of user L0 page table
 /// * `user_va` - Virtual address in user space (must be < 0x8000_0000_0000)
@@ -46,6 +57,7 @@ pub fn alloc_zero_map_page(
 /// # Safety
 /// - `ttbr0_phys` must point to a valid L0 page table
 /// - `user_va` must be in valid user address range
+/// - Caller must ensure corresponding VMA is tracked (see warning above)
 pub unsafe fn map_user_page(
     ttbr0_phys: usize,
     user_va: usize,
