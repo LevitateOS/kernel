@@ -159,6 +159,10 @@ pub fn sys_faccessat(dirfd: i32, pathname: usize, mode: i32, flags: i32) -> Sysc
         Ok(_) => Ok(0), // File exists, access granted
         Err(los_vfs::error::VfsError::NotFound) => Err(ENOENT),
         Err(los_vfs::error::VfsError::NotADirectory) => Err(ENOTDIR),
-        Err(_) => Err(EACCES),
+        Err(e) => {
+            // TEAM_459: Log unexpected errors to help debug
+            log::warn!("[SYSCALL] faccessat '{}' failed with: {:?}", path_str, e);
+            Err(EACCES)
+        }
     }
 }

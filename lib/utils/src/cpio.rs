@@ -213,6 +213,8 @@ pub struct CpioEntry<'a> {
     pub entry_type: CpioEntryType,
     /// TEAM_176: Inode number
     pub ino: u64,
+    /// TEAM_459: Full mode (file type + permission bits)
+    pub mode: u32,
 }
 
 /// Iterator over CPIO archive entries
@@ -286,14 +288,17 @@ impl<'a> Iterator for CpioIterator<'a> {
         self.offset = next_header;
 
         // TEAM_176: Extract entry type and inode from header
+        // TEAM_459: Also extract full mode including permission bits
         let entry_type = header.entry_type();
         let ino = header.ino();
+        let mode = header.mode();
 
         Some(CpioEntry {
             name,
             data: file_data,
             entry_type,
             ino,
+            mode,
         })
     }
 }

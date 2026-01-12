@@ -167,12 +167,10 @@ impl InitramfsSuperblock {
     }
 
     pub fn make_inode(&self, entry: CpioEntry<'static>, sb: Weak<dyn Superblock>) -> Arc<Inode> {
-        let mode = match entry.entry_type {
-            CpioEntryType::File => mode::S_IFREG | 0o444,
-            CpioEntryType::Directory => mode::S_IFDIR | 0o555,
-            CpioEntryType::Symlink => mode::S_IFLNK | 0o777,
-            _ => mode::S_IFREG | 0o444,
-        };
+        // TEAM_459: Use the actual mode from the CPIO entry instead of hardcoding.
+        // This preserves executable bits from the original files.
+        // The CPIO mode already includes file type bits (S_IFREG, S_IFDIR, S_IFLNK).
+        let mode = entry.mode;
 
         Arc::new(Inode::new(
             entry.ino,
