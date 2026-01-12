@@ -70,7 +70,13 @@ pub fn poll_for_ctrl_c() -> bool {
 }
 
 pub fn read_byte() -> Option<u8> {
-    // TEAM_429: Check secondary input (VirtIO keyboard) first
+    // TEAM_444: Check serial port FIRST in case we're in nographic mode
+    // This ensures serial input works when VirtIO keyboard is unavailable
+    if let Some(byte) = crate::arch::console::WRITER.lock().read_byte() {
+        return Some(byte);
+    }
+
+    // TEAM_429: Check secondary input (VirtIO keyboard)
     if SECONDARY_INPUT_ENABLED.load(Ordering::Acquire) {
         let ptr = SECONDARY_INPUT.load(Ordering::Acquire);
         if !ptr.is_null() {
@@ -81,10 +87,7 @@ pub fn read_byte() -> Option<u8> {
         }
     }
 
-    if let Some(byte) = RX_BUFFER.lock().pop() {
-        return Some(byte);
-    }
-    crate::arch::console::WRITER.lock().read_byte()
+    RX_BUFFER.lock().pop()
 }
 
 pub fn set_secondary_output(callback: SecondaryOutputFn) {

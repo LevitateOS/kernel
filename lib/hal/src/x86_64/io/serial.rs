@@ -56,8 +56,10 @@ impl SerialPort {
     }
 
     pub fn read_byte(&self) -> Option<u8> {
-        if (self.line_status() & 1) != 0 {
-            Some(unsafe { self.inb(0) })
+        let status = self.line_status();
+        if (status & 1) != 0 {
+            let byte = unsafe { self.inb(0) };
+            Some(byte)
         } else {
             None
         }

@@ -52,6 +52,7 @@ pub type SyscallResult = Result<i64, u32>;
 
 pub fn syscall_dispatch(frame: &mut SyscallFrame) {
     let nr = frame.syscall_number();
+
     let result = match SyscallNumber::from_u64(nr) {
         Some(SyscallNumber::Read) => fs::sys_read(
             frame.arg0() as usize,
@@ -78,6 +79,13 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
         ),
         Some(SyscallNumber::Yield) => process::sys_yield(),
         Some(SyscallNumber::Shutdown) => sys::sys_shutdown(frame.arg0() as u32),
+        // TEAM_444: Legacy open() - translates to openat(AT_FDCWD, ...)
+        Some(SyscallNumber::Open) => fs::sys_openat(
+            -100, // AT_FDCWD
+            frame.arg0() as usize,
+            frame.arg1() as u32,
+            frame.arg2() as u32,
+        ),
         // TEAM_345: Linux ABI - openat(dirfd, pathname, flags, mode)
         Some(SyscallNumber::Openat) => fs::sys_openat(
             frame.arg0() as i32,

@@ -34,6 +34,7 @@ pub enum SyscallNumber {
     // === Standard Linux x86_64 syscalls ===
     Read = 0,
     Write = 1,
+    Open = 2,  // TEAM_444: Legacy open() - maps to openat(AT_FDCWD, ...)
     Close = 3,
     Fstat = 5,
     Poll = 7,  // TEAM_406: I/O multiplexing
@@ -147,6 +148,7 @@ impl SyscallNumber {
         match n {
             0 => Some(Self::Read),
             1 => Some(Self::Write),
+            2 => Some(Self::Open),  // TEAM_444: Legacy open()
             3 => Some(Self::Close),
             5 => Some(Self::Fstat),
             7 => Some(Self::Poll),  // TEAM_406
@@ -285,15 +287,30 @@ pub struct Termios {
 }
 
 impl Termios {
-    pub const INITIAL_TERMIOS: Termios = Termios {
-        c_iflag: 0,
-        c_oflag: 0,
-        c_cflag: 0,
-        c_lflag: 0,
-        c_line: 0,
-        c_cc: [0u8; NCCS],
-        c_ispeed: 0,
-        c_ospeed: 0,
+    // TEAM_445: Fixed INITIAL_TERMIOS to match aarch64 - was all zeros causing input issues
+    pub const INITIAL_TERMIOS: Termios = {
+        let mut cc = [0u8; NCCS];
+        cc[0] = 0x03; // VINTR = Ctrl+C
+        cc[1] = 0x1C; // VQUIT = Ctrl+\
+        cc[2] = 0x7F; // VERASE = DEL
+        cc[3] = 0x15; // VKILL = Ctrl+U
+        cc[4] = 0x04; // VEOF = Ctrl+D
+        cc[5] = 0x00; // VTIME
+        cc[6] = 0x01; // VMIN
+        cc[8] = 0x11; // VSTART = Ctrl+Q
+        cc[9] = 0x13; // VSTOP = Ctrl+S
+        cc[10] = 0x1A; // VSUSP = Ctrl+Z
+
+        Termios {
+            c_iflag: 0x0500,                                    // ICRNL | IXON
+            c_oflag: 0x0005,                                    // OPOST | ONLCR
+            c_cflag: 0x00BF,                                    // B38400 | CS8 | CREAD | HUPCL
+            c_lflag: 0x01 | 0x02 | 0x08 | 0x10 | 0x20 | 0x8000, // ISIG | ICANON | ECHO | ECHOE | ECHOK | IEXTEN
+            c_line: 0,
+            c_cc: cc,
+            c_ispeed: 38400,
+            c_ospeed: 38400,
+        }
     };
 }
 
