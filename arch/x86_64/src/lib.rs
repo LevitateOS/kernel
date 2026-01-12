@@ -469,68 +469,112 @@ pub unsafe fn switch_mmu_config(config_phys: usize) {
     }
 }
 
+// TEAM_454: Debug globals for exception_return debugging
+#[used]
+#[unsafe(no_mangle)]
+pub static mut DEBUG_RSP: u64 = 0;
+#[used]
+#[unsafe(no_mangle)]
+pub static mut DEBUG_STACK0: u64 = 0;
+#[used]
+#[unsafe(no_mangle)]
+pub static mut DEBUG_STACK7: u64 = 0;  // rcx offset
+#[used]
+#[unsafe(no_mangle)]
+pub static mut DEBUG_STACK15: u64 = 0; // rsp offset
+
+// TEAM_455: Debug global for CR3 value at exception_return
+#[used]
+#[unsafe(no_mangle)]
+pub static mut DEBUG_CR3: u64 = 0;
+
 // TEAM_438: exception_return for x86_64 - returns to userspace from a SyscallFrame
 // Used by threads created via clone() to enter userspace for the first time.
 // RSP must point to a valid SyscallFrame when this is called.
+// TEAM_454: This function is called from task_entry_trampoline, which uses a CALL instruction.
+// On x86_64, CALL pushes a return address onto the stack, so we must skip it first.
+// TEAM_455: MUST be a naked function to prevent compiler-generated prologue from modifying RSP.
+#[unsafe(naked)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn exception_return() -> ! {
-    // The SyscallFrame is on the stack. We need to restore registers and sysretq.
-    // This mirrors the return path in syscall_entry but as a standalone function.
-    unsafe {
-        core::arch::asm!(
-            // RSP should point to the SyscallFrame
-            // Frame layout (from syscall_entry):
-            // [0]  rax (syscall_nr / return value)
-            // [1]  rdi (arg0)
-            // [2]  rsi (arg1)
-            // [3]  rdx (arg2)
-            // [4]  r10 (arg3)
-            // [5]  r8  (arg4)
-            // [6]  r9  (arg5)
-            // [7]  rcx (user RIP)
-            // [8]  r11 (user RFLAGS)
-            // [9]  rbx
-            // [10] rbp
-            // [11] r12
-            // [12] r13
-            // [13] r14
-            // [14] r15
-            // [15] rsp (user RSP)
-            // ... more fields we don't need
+    // SAFETY: This is a naked function that manually manages the stack.
+    // RSP points to: [return_address][SyscallFrame...]
+    // We skip the return address and restore registers from SyscallFrame.
+    core::arch::naked_asm!(
+        // TEAM_455: Debug - capture CR3 to verify page table
+        "mov rax, cr3",
+        "mov [{debug_cr3}], rax",
 
-            // Sanitize RFLAGS (index 8)
-            "mov rax, [rsp + 8*8]",
-            "and rax, 0x3C7FD7",       // Mask restricted bits
-            "or rax, 0x202",            // Force IF=1, bit1=1
-            "mov [rsp + 8*8], rax",
+        // TEAM_454: Skip the return address pushed by CALL instruction.
+        // On x86_64, task_entry_trampoline calls this function which pushes a return address.
+        // We need to skip it to get to the actual SyscallFrame.
+        "add rsp, 8",
 
-            // Restore registers
-            "pop rax",                  // Return value
-            "pop rdi",
-            "pop rsi",
-            "pop rdx",
-            "pop r10",
-            "pop r8",
-            "pop r9",
-            "pop rcx",                  // User RIP
-            "pop r11",                  // User RFLAGS
-            "pop rbx",
-            "pop rbp",
-            "pop r12",
-            "pop r13",
-            "pop r14",
-            "pop r15",
+        // TEAM_454: Debug - save RSP and key stack values before pops
+        "mov [{debug_rsp}], rsp",
+        "mov rax, [rsp]",
+        "mov [{debug_stack0}], rax",
+        "mov rax, [rsp + 56]",
+        "mov [{debug_stack7}], rax",
+        "mov rax, [rsp + 120]",
+        "mov [{debug_stack15}], rax",
+        // RSP should now point to the SyscallFrame
+        // Frame layout (from syscall_entry):
+        // [0]  rax (syscall_nr / return value)
+        // [1]  rdi (arg0)
+        // [2]  rsi (arg1)
+        // [3]  rdx (arg2)
+        // [4]  r10 (arg3)
+        // [5]  r8  (arg4)
+        // [6]  r9  (arg5)
+        // [7]  rcx (user RIP)
+        // [8]  r11 (user RFLAGS)
+        // [9]  rbx
+        // [10] rbp
+        // [11] r12
+        // [12] r13
+        // [13] r14
+        // [14] r15
+        // [15] rsp (user RSP)
+        // ... more fields we don't need
 
-            // Now RSP points to frame.rsp (user RSP)
-            "cli",                      // Disable interrupts before swapgs
-            "mov rsp, [rsp]",           // Load user RSP
+        // Sanitize RFLAGS (index 8)
+        // TEAM_454: Clear TF (trap flag, bit 8) to prevent DEBUG exceptions
+        "mov rax, [rsp + 8*8]",
+        "and rax, 0x3C7ED7",       // Mask restricted bits, clear TF (bit 8)
+        "or rax, 0x202",            // Force IF=1, bit1=1
+        "mov [rsp + 8*8], rax",
 
-            "swapgs",                   // Swap to user GS
-            "sysretq",                  // Return to Ring 3
+        // Restore registers
+        "pop rax",                  // Return value
+        "pop rdi",
+        "pop rsi",
+        "pop rdx",
+        "pop r10",
+        "pop r8",
+        "pop r9",
+        "pop rcx",                  // User RIP
+        "pop r11",                  // User RFLAGS
+        "pop rbx",
+        "pop rbp",
+        "pop r12",
+        "pop r13",
+        "pop r14",
+        "pop r15",
 
-            options(noreturn)
-        );
-    }
+        // Now RSP points to frame.rsp (user RSP)
+        "cli",                      // Disable interrupts before swapgs
+        "mov rsp, [rsp]",           // Load user RSP
+
+        "swapgs",                   // Swap to user GS
+        "sysretq",                  // Return to Ring 3
+
+        debug_cr3 = sym DEBUG_CR3,
+        debug_rsp = sym DEBUG_RSP,
+        debug_stack0 = sym DEBUG_STACK0,
+        debug_stack7 = sym DEBUG_STACK7,
+        debug_stack15 = sym DEBUG_STACK15,
+    );
 }
 
 // TEAM_422: Kernel integration is handled by the levitate binary, not this crate.

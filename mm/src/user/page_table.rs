@@ -162,7 +162,7 @@ pub unsafe fn destroy_user_page_table(ttbr0_phys: usize) -> Result<(), MmuError>
 /// - `parent_ttbr0` must be a valid user L0/PML4 page table
 /// - `vmas` must accurately describe the parent's mapped regions
 pub fn copy_user_address_space(parent_ttbr0: usize, vmas: &VmaList) -> Option<usize> {
-    log::trace!("[FORK] Copying user address space...");
+    log::info!("[FORK] Copying user address space...");
 
     // 1. Create a new page table for the child
     let child_ttbr0 = create_user_page_table()?;
@@ -172,10 +172,16 @@ pub fn copy_user_address_space(parent_ttbr0: usize, vmas: &VmaList) -> Option<us
     // SAFETY: parent_ttbr0 is a valid page table provided by caller
     let parent_root = unsafe { &*(parent_root_va as *const PageTable) };
 
+    // TEAM_455: Debug - count VMAs and pages copied
+    let mut vma_count = 0usize;
+    let mut total_pages = 0usize;
+
     // 3. For each VMA, copy all mapped pages
     for vma in vmas.iter() {
-        log::trace!(
-            "[FORK] Copying VMA 0x{:x}-0x{:x} flags={:?}",
+        vma_count += 1;
+        log::info!(
+            "[FORK] VMA {}: 0x{:x}-0x{:x} flags={:?}",
+            vma_count,
             vma.start,
             vma.end,
             vma.flags
@@ -227,6 +233,7 @@ pub fn copy_user_address_space(parent_ttbr0: usize, vmas: &VmaList) -> Option<us
                     }
                     return None;
                 }
+                total_pages += 1;
             }
             // If page not mapped in parent, skip (sparse mapping)
 
@@ -234,11 +241,64 @@ pub fn copy_user_address_space(parent_ttbr0: usize, vmas: &VmaList) -> Option<us
         }
     }
 
-    log::trace!(
-        "[FORK] Address space copy complete, child_ttbr0=0x{:x}",
-        child_ttbr0
+    log::info!(
+        "[FORK] Address space copy complete, child_ttbr0=0x{:x}, {} pages copied",
+        child_ttbr0,
+        total_pages
     );
     Some(child_ttbr0)
+}
+
+/// TEAM_454: Refresh kernel mappings in a user page table.
+///
+/// This should be called after all kernel allocations are done when forking,
+/// to ensure the child's page table includes any new kernel heap mappings
+/// that were created after the initial `create_user_page_table()` call.
+///
+/// # Arguments
+/// * `child_ttbr0` - Physical address of the child's page table root
+///
+/// # Safety
+/// - `child_ttbr0` must be a valid PML4 page table
+#[cfg(target_arch = "x86_64")]
+pub fn refresh_kernel_mappings(child_ttbr0: usize) {
+    // Get current CR3 (which has the latest kernel mappings)
+    let current_root_phys: usize;
+    // SAFETY: Reading CR3 is a standard privileged operation.
+    unsafe {
+        core::arch::asm!("mov {}, cr3", out(reg) current_root_phys);
+    }
+    let current_root_phys = current_root_phys & !0xFFF;
+
+    log::trace!(
+        "[FORK] refresh_kernel_mappings: current CR3=0x{:x}, child=0x{:x}",
+        current_root_phys,
+        child_ttbr0
+    );
+
+    // Get references to both page tables
+    let current_root_va = mmu::phys_to_virt(current_root_phys);
+    let child_root_va = mmu::phys_to_virt(child_ttbr0);
+    // SAFETY: Both addresses are valid page tables.
+    let current_root = unsafe { &*(current_root_va as *const PageTable) };
+    let child_root = unsafe { &mut *(child_root_va as *mut PageTable) };
+
+    // Re-copy kernel mappings (PML4 entries 256-511)
+    mmu::copy_kernel_mappings(child_root, current_root);
+
+    // TEAM_454: Debug - verify entry 511 (kernel higher-half) was copied
+    log::trace!(
+        "[FORK] PML4[511] after refresh: parent=0x{:x}, child=0x{:x}",
+        current_root.entries[511].address(),
+        child_root.entries[511].address()
+    );
+}
+
+/// TEAM_454: Stub for aarch64 (no-op since kernel mappings work differently)
+#[cfg(target_arch = "aarch64")]
+pub fn refresh_kernel_mappings(_child_ttbr0: usize) {
+    // On aarch64, kernel and user page tables are separate (TTBR0/TTBR1)
+    // so this is a no-op
 }
 
 /// TEAM_432: Convert VMA flags to page table flags.

@@ -66,6 +66,25 @@ impl Context {
     }
 }
 
+// TEAM_454: Debug globals for enter_user_mode
+#[used]
+#[unsafe(no_mangle)]
+pub static mut DEBUG_ENTER_USER_MODE: u64 = 0;
+#[used]
+#[unsafe(no_mangle)]
+pub static mut DEBUG_ENTER_ENTRY: u64 = 0;
+#[used]
+#[unsafe(no_mangle)]
+pub static mut DEBUG_ENTER_SP: u64 = 0;
+
+// TEAM_454: Debug globals for task_entry_trampoline
+#[used]
+#[unsafe(no_mangle)]
+pub static mut DEBUG_TRAMPOLINE_RBX: u64 = 0;
+#[used]
+#[unsafe(no_mangle)]
+pub static mut DEBUG_TRAMPOLINE_COUNT: u64 = 0;
+
 /// TEAM_293: Enter Ring 3 userspace using sysretq.
 /// RCX = entry point (becomes RIP after sysretq)
 /// R11 = RFLAGS (should have IF=1 for interrupts)
@@ -73,6 +92,10 @@ impl Context {
 pub unsafe fn enter_user_mode(entry_point: usize, user_sp: usize) -> ! {
     unsafe {
         core::arch::asm!(
+            // TEAM_454: Debug - capture parameters before sysretq
+            "mov qword ptr [{debug_enter}], 0x12345678",  // Marker that we ran
+            "mov [{debug_entry}], {entry}",
+            "mov [{debug_sp}], {sp}",
             "swapgs",               // Restore user GS base (or set to 0 initially)
             "mov rsp, {sp}",        // Set user stack
             "mov rcx, {entry}",     // sysretq: RCX -> RIP
@@ -80,6 +103,9 @@ pub unsafe fn enter_user_mode(entry_point: usize, user_sp: usize) -> ! {
             "sysretq",
             sp = in(reg) user_sp,
             entry = in(reg) entry_point,
+            debug_enter = sym DEBUG_ENTER_USER_MODE,
+            debug_entry = sym DEBUG_ENTER_ENTRY,
+            debug_sp = sym DEBUG_ENTER_SP,
             options(noreturn)
         );
     }
@@ -96,20 +122,37 @@ unsafe extern "Rust" {
 }
 
 // TEAM_293: Task entry trampoline - called after context switch to new task
-// Entry wrapper address is in rbx (restored from context.x19)
+// TEAM_454: Made naked to avoid prologue that would corrupt RSP.
+// Entry wrapper address is in rbx (restored from context).
+// On entry, RSP points to the kernel stack (potentially with a SyscallFrame at top for fork/threads).
+#[unsafe(naked)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn task_entry_trampoline() {
-    // Get entry wrapper from rbx (was context.x19)
-    let entry_wrapper: extern "C" fn();
-    unsafe {
-        core::arch::asm!("mov {}, rbx", out(reg) entry_wrapper);
-    }
-
-    // Call the entry wrapper (which will call enter_user_mode or run kernel task)
-    entry_wrapper();
-
-    // If the entry wrapper returns, exit the task
-    unsafe { task_exit() };
+    // SAFETY: This is a naked function that directly manipulates registers.
+    // rbx contains the entry_wrapper function pointer (set by Context::new).
+    // We call entry_wrapper directly. If it returns (shouldn't for user tasks),
+    // we call task_exit.
+    core::arch::naked_asm!(
+        // TEAM_454: Debug - capture rbx and increment counter before call
+        "mov [{debug_rbx}], rbx",
+        "mov rax, [{debug_count}]",
+        "inc rax",
+        "mov [{debug_count}], rax",
+        // Call the entry wrapper (which is in rbx)
+        // This will be either:
+        // - exception_return (for fork/clone threads) - never returns
+        // - enter_user_mode wrapper (for new processes) - never returns
+        "call rbx",
+        // If the entry wrapper somehow returns, call task_exit
+        // This shouldn't happen for user tasks, but provides safety for kernel tasks
+        "call {task_exit}",
+        // Infinite loop as fallback (should never reach)
+        "2:",
+        "jmp 2b",
+        task_exit = sym task_exit,
+        debug_rbx = sym DEBUG_TRAMPOLINE_RBX,
+        debug_count = sym DEBUG_TRAMPOLINE_COUNT,
+    );
 }
 
 // TEAM_277: Context switch stub

@@ -19,7 +19,7 @@ extern crate alloc;
 use los_arch_aarch64::{Context, cpu, cpu_switch_to, switch_mmu_config};
 
 #[cfg(target_arch = "x86_64")]
-use los_arch_x86_64::{Context, cpu, cpu_switch_to, switch_mmu_config};
+use los_arch_x86_64::{Context, cpu, cpu_switch_to, exception_return, switch_mmu_config};
 
 use alloc::boxed::Box;
 use alloc::string::String;
@@ -151,9 +151,16 @@ pub unsafe fn set_current_task(task: Arc<TaskControlBlock>) {
 /// [MT4] switch_to() no-ops when switching to same task.
 pub fn switch_to(new_task: Arc<TaskControlBlock>) {
     let old_task = current_task();
+    log::info!(
+        "[SWITCH] switch_to called: old PID={} (ptr={:p}), new PID={} (ptr={:p})",
+        old_task.id.0, Arc::as_ptr(&old_task),
+        new_task.id.0, Arc::as_ptr(&new_task)
+    );
     if Arc::ptr_eq(&old_task, &new_task) {
+        log::info!("[SWITCH] Same task, returning early");
         return; // [MT4] no-op for same task
     }
+    log::info!("[SWITCH] Different tasks, proceeding with context switch");
 
 
     unsafe {
@@ -173,6 +180,40 @@ pub fn switch_to(new_task: Arc<TaskControlBlock>) {
         // Critical for process isolation. Without this, new task runs in old task's address space.
         if new_task.ttbr0 != 0 {
             switch_mmu_config(new_task.ttbr0);
+        }
+
+        // TEAM_454: Debug - log context values before switch
+        #[cfg(target_arch = "x86_64")]
+        {
+            let ctx = &*new_ctx;
+            log::trace!(
+                "[SWITCH] To PID={}: ctx.rsp=0x{:x}, ctx.rip=0x{:x}, ctx.rbx=0x{:x}",
+                new_task.id.0,
+                ctx.rsp,
+                ctx.rip,
+                ctx.rbx
+            );
+            // TEAM_454: Verify the frame at ctx.rsp hasn't been corrupted
+            if ctx.rsp != 0 && ctx.rsp > 0xffff800000000000 {
+                // Read frame at ctx.rsp
+                let frame_ptr = ctx.rsp as *const los_arch_x86_64::SyscallFrame;
+                let frame = &*frame_ptr;
+                log::trace!(
+                    "[SWITCH] Frame at rsp: rcx=0x{:x}, rsp=0x{:x}, rax=0x{:x}",
+                    frame.rcx,
+                    frame.rsp,
+                    frame.rax
+                );
+                // TEAM_454: Dump raw bytes at offsets 56 (rcx) and 120 (rsp) to verify
+                let raw = ctx.rsp as *const u64;
+                let rcx_raw = *raw.add(7);  // offset 56 = index 7
+                let rsp_raw = *raw.add(15); // offset 120 = index 15
+                log::trace!(
+                    "[SWITCH] Raw at offset 56: 0x{:x}, at offset 120: 0x{:x}",
+                    rcx_raw,
+                    rsp_raw
+                );
+            }
         }
 
         cpu_switch_to(old_ctx, new_ctx);
@@ -373,6 +414,7 @@ impl From<UserTask> for TaskControlBlock {
         let user_entry = user.entry_point;
         let heap = user.heap; // TEAM_166: Preserve heap state
         let fd_table = user.fd_table; // TEAM_250: Preserve inherited FD table
+        let vmas = user.vmas; // TEAM_455: Preserve VMA list for fork() support
 
         // Set up context for first switch
         let context = Context::new(stack_top, user_task_entry_wrapper as *const () as usize);
@@ -400,8 +442,8 @@ impl From<UserTask> for TaskControlBlock {
             signal_trampoline: AtomicUsize::new(0),
             // TEAM_228: No clear-on-exit TID for spawned processes
             clear_child_tid: AtomicUsize::new(0),
-            // TEAM_238: New user processes start with empty VMA list
-            vmas: IrqSafeLock::new(los_mm::vma::VmaList::new()),
+            // TEAM_455: Use VMA list from ELF loader for fork() support
+            vmas: IrqSafeLock::new(vmas),
             // TEAM_408: TLS base from UserTask (allocated during spawn)
             tls: AtomicUsize::new(user.tls),
             // TEAM_394: New processes inherit parent's pgid/sid or use own PID
@@ -417,7 +459,16 @@ impl From<UserTask> for TaskControlBlock {
 /// Made public for use by thread creation.
 pub fn user_task_entry_wrapper() -> ! {
     let task = current_task();
-    log::trace!(
+    #[cfg(target_arch = "x86_64")]
+    log::info!(
+        "[TASK] Entering user task PID={} at 0x{:x} (wrapper fn=0x{:x}, exception_return=0x{:x})",
+        task.id.0,
+        task.user_entry,
+        user_task_entry_wrapper as *const () as usize,
+        exception_return as *const () as usize
+    );
+    #[cfg(target_arch = "aarch64")]
+    log::info!(
         "[TASK] Entering user task PID={} at 0x{:x}",
         task.id.0,
         task.user_entry
@@ -460,6 +511,7 @@ pub fn user_task_entry_wrapper() -> ! {
         }
 
         // Enter EL0 (AArch64) or Ring 3 (x86_64)
+        log::info!("[TASK] Calling enter_user_mode(0x{:x}, 0x{:x})", task.user_entry, task.user_sp);
         crate::user::enter_user_mode(task.user_entry, task.user_sp);
     }
 }

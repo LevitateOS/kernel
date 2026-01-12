@@ -245,13 +245,14 @@ use crate::SyscallFrame;
 
 /// TEAM_436: ExecImage mirrors the kernel's ExecImage struct.
 /// Contains prepared address space for execve.
-#[derive(Debug)]
+/// TEAM_455: Added vmas field for fork() support after execve.
 pub struct ExecImage {
     pub ttbr0: usize,
     pub entry_point: usize,
     pub stack_pointer: usize,
     pub initial_brk: usize,
     pub tls_base: usize,
+    pub vmas: los_mm::vma::VmaList,
 }
 
 /// TEAM_436: Maximum number of arguments for execve.
@@ -382,6 +383,9 @@ fn execve_internal(
 
     // 7. Update heap state
     task.heap.lock().reset(exec_image.initial_brk);
+
+    // TEAM_455: Update VMAs for fork() support after execve
+    *task.vmas.lock() = exec_image.vmas;
 
     // 8. Set syscall frame to jump to new entry point
     if let Some(f) = frame {
@@ -607,10 +611,12 @@ pub fn sys_spawn_args(
 /// TEAM_188: sys_waitpid - Wait for a child process to exit.
 /// TEAM_414: Refactored to use write_exit_status helper.
 /// TEAM_453: Added support for pid=-1 (wait for any child) for BusyBox init.
+/// TEAM_454: Fixed to properly block when waiting for any child.
 pub fn sys_waitpid(pid: i32, status_ptr: usize) -> SyscallResult {
     let current = los_sched::current_task();
 
     // TEAM_453: Handle pid=-1 (wait for any child)
+    // TEAM_454: Fixed to properly block instead of returning ECHILD
     if pid == -1 {
         // Try to find any exited child
         if let Some((child_pid, exit_code)) = los_sched::process_table::try_wait_any() {
@@ -618,8 +624,20 @@ pub fn sys_waitpid(pid: i32, status_ptr: usize) -> SyscallResult {
             los_sched::process_table::reap_zombie(child_pid);
             return Ok(child_pid as i64);
         }
-        // No exited children yet - for now return ECHILD
-        // TODO: Block and wait for any child to exit
+
+        // No exited children yet - block and wait
+        los_sched::process_table::add_any_child_waiter(current.clone());
+        current.set_state(los_sched::TaskState::Blocked);
+        los_sched::scheduler::SCHEDULER.schedule();
+
+        // Woken up - try again to find exited child
+        if let Some((child_pid, exit_code)) = los_sched::process_table::try_wait_any() {
+            let _ = write_exit_status(current.ttbr0, status_ptr, exit_code);
+            los_sched::process_table::reap_zombie(child_pid);
+            return Ok(child_pid as i64);
+        }
+
+        // Still no child? Should not happen, but return ECHILD for safety
         return Err(ECHILD);
     }
 

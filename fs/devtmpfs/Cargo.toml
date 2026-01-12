@@ -11,4 +11,5 @@ los_vfs = { path = "../../vfs" }
 los_hal = { path = "../../lib/hal" }
 los_error = { path = "../../lib/error" }
 los_utils = { path = "../../lib/utils" }
+los_sched = { path = "../../sched" }
 log = "0.4"

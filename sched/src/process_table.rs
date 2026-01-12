@@ -36,6 +36,10 @@ pub struct ProcessEntry {
 pub static PROCESS_TABLE: IrqSafeLock<BTreeMap<Pid, ProcessEntry>> =
     IrqSafeLock::new(BTreeMap::new());
 
+/// TEAM_454: Tasks waiting for ANY child to exit (used by waitpid(-1))
+static ANY_CHILD_WAITERS: IrqSafeLock<Vec<Arc<TaskControlBlock>>> =
+    IrqSafeLock::new(Vec::new());
+
 /// TEAM_188: Register a new process in the table.
 ///
 /// Called by sys_spawn_args when a new process is created.
@@ -58,6 +62,7 @@ pub fn register_process(pid: Pid, parent_pid: Pid, task: Arc<TaskControlBlock>) 
 }
 
 /// TEAM_188: Mark a process as exited and return waiters to wake.
+/// TEAM_454: Also returns "any child" waiters.
 ///
 /// Called by sys_exit when a process terminates.
 ///
@@ -68,13 +73,25 @@ pub fn register_process(pid: Pid, parent_pid: Pid, task: Arc<TaskControlBlock>) 
 /// # Returns
 /// List of tasks that were waiting for this process (to be woken up)
 pub fn mark_exited(pid: Pid, exit_code: i32) -> Vec<Arc<TaskControlBlock>> {
-    let mut table = PROCESS_TABLE.lock();
-    if let Some(entry) = table.get_mut(&pid) {
-        entry.exit_code = Some(exit_code);
-        entry.task = None; // Become zombie
-        return entry.waiters.drain(..).collect();
+    let mut waiters_to_wake = Vec::new();
+
+    // Get specific waiters for this PID
+    {
+        let mut table = PROCESS_TABLE.lock();
+        if let Some(entry) = table.get_mut(&pid) {
+            entry.exit_code = Some(exit_code);
+            entry.task = None; // Become zombie
+            waiters_to_wake.extend(entry.waiters.drain(..));
+        }
     }
-    Vec::new()
+
+    // TEAM_454: Also wake up "any child" waiters
+    {
+        let mut any_waiters = ANY_CHILD_WAITERS.lock();
+        waiters_to_wake.extend(any_waiters.drain(..));
+    }
+
+    waiters_to_wake
 }
 
 /// TEAM_188: Try to get exit code for a process.
@@ -141,6 +158,17 @@ pub enum WaitError {
     AlreadyExited,
     /// Process not found in table
     NotFound,
+}
+
+/// TEAM_454: Add a waiter for any child to exit.
+///
+/// Used by waitpid(-1) when no children have exited yet.
+///
+/// # Arguments
+/// * `waiter` - The task that is waiting for any child
+pub fn add_any_child_waiter(waiter: Arc<TaskControlBlock>) {
+    let mut waiters = ANY_CHILD_WAITERS.lock();
+    waiters.push(waiter);
 }
 
 /// TEAM_188: Reap a zombie process (remove from table).

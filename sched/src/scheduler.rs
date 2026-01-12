@@ -20,6 +20,7 @@ impl Scheduler {
 
     /// Add a task to the ready list.
     pub fn add_task(&self, task: Arc<TaskControlBlock>) {
+        log::info!("[SCHED] add_task: PID={}", task.id.0);
         self.ready_list.lock().push_back(task);
     }
 

@@ -10,6 +10,7 @@
 
 use los_hal::mmu::{self, PAGE_SIZE, PageFlags};
 use los_mm::user as mm_user;
+use los_mm::vma::{Vma, VmaFlags, VmaList};
 
 /// ELF Magic Number: 0x7F 'E' 'L' 'F'
 pub const ELF_MAGIC: [u8; 4] = [0x7F, b'E', b'L', b'F'];
@@ -354,11 +355,14 @@ impl<'a> Elf<'a> {
     /// * `ttbr0_phys` - Physical address of user L0 page table
     ///
     /// # Returns
-    /// Tuple of (entry_point, initial_brk) on success.
-    pub fn load(&self, ttbr0_phys: usize) -> Result<(usize, usize), ElfError> {
+    /// Tuple of (entry_point, initial_brk, vma_list) on success.
+    /// TEAM_455: Now returns VMA list for fork() support.
+    pub fn load(&self, ttbr0_phys: usize) -> Result<(usize, usize, VmaList), ElfError> {
         let mut max_vaddr = 0;
         // TEAM_354: Get load base for PIE support
         let load_base = self.load_base();
+        // TEAM_455: Track VMAs for all loaded segments
+        let mut vma_list = VmaList::new();
 
         // TEAM_297 BREADCRUMB: DEAD_END - Missing GOT/PLT Relocations.
         // Userspace binaries are statically linked (ET_EXEC).
@@ -506,6 +510,13 @@ impl<'a> Elf<'a> {
             }
 
             // .bss is already zeroed (we zeroed pages above)
+
+            // TEAM_455: Create VMA for this segment
+            let vma_flags = page_flags_to_vma_flags(flags);
+            let vma_start = page_start;
+            let vma_end = page_end;
+            // Insert VMA - ignore overlap errors (segments can share pages)
+            let _ = vma_list.insert(Vma::new(vma_start, vma_end, vma_flags));
         }
 
         // Calculate initial brk (page-aligned end of loaded segments)
@@ -523,7 +534,7 @@ impl<'a> Elf<'a> {
 
         // TEAM_354: Return adjusted entry point
         let entry_point = load_base + self.header.e_entry as usize;
-        Ok((entry_point, initial_brk))
+        Ok((entry_point, initial_brk, vma_list))
     }
 
     // TEAM_414: Removed dead code - process_relocations(), apply_relocation(), write_user_u64()
@@ -532,6 +543,21 @@ impl<'a> Elf<'a> {
 }
 
 use los_hal::traits::PageAllocator;
+
+/// TEAM_455: Convert PageFlags to VmaFlags for ELF segment tracking.
+fn page_flags_to_vma_flags(flags: PageFlags) -> VmaFlags {
+    let mut vma_flags = VmaFlags::READ;
+
+    if flags == PageFlags::USER_DATA || flags == PageFlags::USER_CODE_DATA {
+        vma_flags |= VmaFlags::WRITE;
+    }
+
+    if flags == PageFlags::USER_CODE || flags == PageFlags::USER_CODE_DATA {
+        vma_flags |= VmaFlags::EXEC;
+    }
+
+    vma_flags
+}
 
 #[cfg(test)]
 mod tests {

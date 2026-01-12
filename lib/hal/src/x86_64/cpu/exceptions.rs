@@ -262,10 +262,57 @@ extern "C" fn general_protection_fault_handler(frame: &ExceptionStackFrame, erro
     );
 }
 
+// TEAM_454: Debug globals defined in los_arch_x86_64
+unsafe extern "C" {
+    static DEBUG_RSP: u64;
+    static DEBUG_STACK0: u64;
+    static DEBUG_STACK7: u64;
+    static DEBUG_STACK15: u64;
+    // Debug globals from enter_user_mode
+    static DEBUG_ENTER_USER_MODE: u64;
+    static DEBUG_ENTER_ENTRY: u64;
+    static DEBUG_ENTER_SP: u64;
+    // Debug globals from task_entry_trampoline
+    static DEBUG_TRAMPOLINE_RBX: u64;
+    static DEBUG_TRAMPOLINE_COUNT: u64;
+    // TEAM_455: Debug CR3 from exception_return
+    static DEBUG_CR3: u64;
+}
+
 extern "C" fn page_fault_handler(frame: &ExceptionStackFrame, error_code: u64) {
     let cr2: u64;
     unsafe {
         asm!("mov {}, cr2", out(reg) cr2);
+    }
+    // TEAM_454: Print debug globals from task_entry_trampoline
+    unsafe {
+        log::error!("[DEBUG] task_entry_trampoline:");
+        log::error!("  call count: {}", DEBUG_TRAMPOLINE_COUNT);
+        log::error!("  last rbx: 0x{:x}", DEBUG_TRAMPOLINE_RBX);
+    }
+    // TEAM_454: Print debug globals from enter_user_mode
+    unsafe {
+        if DEBUG_ENTER_USER_MODE != 0 {
+            log::error!("[DEBUG] enter_user_mode state:");
+            log::error!("  marker: 0x{:x}", DEBUG_ENTER_USER_MODE);
+            log::error!("  entry: 0x{:x}", DEBUG_ENTER_ENTRY);
+            log::error!("  sp: 0x{:x}", DEBUG_ENTER_SP);
+        } else {
+            log::error!("[DEBUG] enter_user_mode was NOT executed (marker=0)");
+        }
+    }
+    // TEAM_454: Print debug globals from exception_return
+    unsafe {
+        if DEBUG_RSP != 0 {
+            log::error!("[DEBUG] exception_return state:");
+            log::error!("  CR3: 0x{:x}", DEBUG_CR3);
+            log::error!("  RSP after add 8: 0x{:x}", DEBUG_RSP);
+            log::error!("  [RSP+0]  (rax): 0x{:x}", DEBUG_STACK0);
+            log::error!("  [RSP+56] (rcx): 0x{:x}", DEBUG_STACK7);
+            log::error!("  [RSP+120](rsp): 0x{:x}", DEBUG_STACK15);
+        } else {
+            log::error!("[DEBUG] exception_return was NOT executed (RSP=0)");
+        }
     }
     panic!(
         "EXCEPTION: PAGE FAULT\nAccessed Address: {cr2:x}\nError Code: {error_code:?}\n{frame:#?}"

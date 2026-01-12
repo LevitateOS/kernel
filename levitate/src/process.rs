@@ -12,15 +12,16 @@ use crate::loader::elf::{Elf, ElfError};
 use crate::task::fd_table::SharedFdTable;
 use crate::task::user::UserTask;
 use los_error::define_kernel_error;
-use los_hal::mmu::MmuError;
+use los_hal::mmu::{MmuError, PAGE_SIZE};
 use los_mm::user::{
     AT_BASE, AT_ENTRY, AT_PHDR, AT_PHENT, AT_PHNUM, AuxEntry, create_user_page_table,
     setup_stack_args, setup_user_stack, setup_user_tls,
 };
+use los_mm::vma::{Vma, VmaFlags, VmaList};
 
 /// TEAM_436: Prepared exec image ready to be applied to a task.
 /// Contains all state needed to replace a process image.
-#[derive(Debug)]
+/// TEAM_455: Added vmas field for fork() support after execve.
 pub struct ExecImage {
     /// Physical address of new page table
     pub ttbr0: usize,
@@ -32,6 +33,8 @@ pub struct ExecImage {
     pub initial_brk: usize,
     /// TLS base address
     pub tls_base: usize,
+    /// VMA list for the new address space
+    pub vmas: VmaList,
 }
 
 /// Number of stack pages to allocate (512KB)
@@ -74,8 +77,8 @@ pub fn spawn_from_elf(elf_data: &[u8], fd_table: SharedFdTable) -> Result<UserTa
     // 2. Create user page tables
     let ttbr0_phys = create_user_page_table().ok_or(SpawnError::PageTableAlloc)?;
 
-    // 3. Load ELF segments
-    let (entry_point, initial_brk) = elf.load(ttbr0_phys).map_err(SpawnError::Elf)?;
+    // 3. Load ELF segments (returns VMAs for fork support)
+    let (entry_point, initial_brk, elf_vmas) = elf.load(ttbr0_phys).map_err(SpawnError::Elf)?;
 
     // 4. Set up user stack
     // SAFETY: ttbr0_phys is a valid page table created above
@@ -116,7 +119,22 @@ pub fn spawn_from_elf(elf_data: &[u8], fd_table: SharedFdTable) -> Result<UserTa
     // SAFETY: ttbr0_phys is a valid page table
     let tls_base = unsafe { setup_user_tls(ttbr0_phys) }.map_err(SpawnError::Tls)?;
 
-    // 8. Create UserTask
+    // TEAM_455: Build complete VMA list for fork() support
+    let mut vmas = elf_vmas;
+
+    // Add stack VMA (stack grows down, so stack_top is the high address)
+    let stack_size = USER_STACK_PAGES * PAGE_SIZE;
+    let stack_bottom = stack_top - stack_size;
+    let _ = vmas.insert(Vma::new(stack_bottom, stack_top, VmaFlags::READ | VmaFlags::WRITE));
+
+    // Add TLS VMA (3 pages allocated by setup_user_tls at TLS_BASE_ADDR)
+    // TLS_BASE_ADDR is 0x100000000000 (from los_mm::user)
+    const TLS_PAGES: usize = 3;
+    let tls_start = tls_base & !0xFFF; // Align to page
+    let tls_end = tls_start + TLS_PAGES * PAGE_SIZE;
+    let _ = vmas.insert(Vma::new(tls_start, tls_end, VmaFlags::READ | VmaFlags::WRITE));
+
+    // 8. Create UserTask with VMA list
     let user_task = UserTask::new(
         entry_point,
         user_sp,
@@ -124,6 +142,7 @@ pub fn spawn_from_elf(elf_data: &[u8], fd_table: SharedFdTable) -> Result<UserTa
         initial_brk,
         fd_table,
         tls_base,
+        vmas,
     );
 
     log::info!(
@@ -138,6 +157,7 @@ pub fn spawn_from_elf(elf_data: &[u8], fd_table: SharedFdTable) -> Result<UserTa
 }
 
 /// TEAM_436: Prepare an exec image from ELF data with arguments.
+/// TEAM_455: Now includes VMA list for fork() support after execve.
 ///
 /// This function is used by execve to prepare a new process image
 /// without creating a new task. The caller applies the image to
@@ -161,8 +181,8 @@ pub fn prepare_exec_image(
     // 2. Create new user page tables
     let ttbr0_phys = create_user_page_table().ok_or(SpawnError::PageTableAlloc)?;
 
-    // 3. Load ELF segments into new address space
-    let (entry_point, initial_brk) = elf.load(ttbr0_phys).map_err(SpawnError::Elf)?;
+    // 3. Load ELF segments into new address space (returns VMAs for fork support)
+    let (entry_point, initial_brk, elf_vmas) = elf.load(ttbr0_phys).map_err(SpawnError::Elf)?;
 
     // 4. Set up user stack
     // SAFETY: ttbr0_phys is a valid page table created above
@@ -201,6 +221,20 @@ pub fn prepare_exec_image(
     // SAFETY: ttbr0_phys is a valid page table
     let tls_base = unsafe { setup_user_tls(ttbr0_phys) }.map_err(SpawnError::Tls)?;
 
+    // TEAM_455: Build complete VMA list for fork() support
+    let mut vmas = elf_vmas;
+
+    // Add stack VMA
+    let stack_size = USER_STACK_PAGES * PAGE_SIZE;
+    let stack_bottom = stack_top - stack_size;
+    let _ = vmas.insert(Vma::new(stack_bottom, stack_top, VmaFlags::READ | VmaFlags::WRITE));
+
+    // Add TLS VMA
+    const TLS_PAGES: usize = 3;
+    let tls_start = tls_base & !0xFFF;
+    let tls_end = tls_start + TLS_PAGES * PAGE_SIZE;
+    let _ = vmas.insert(Vma::new(tls_start, tls_end, VmaFlags::READ | VmaFlags::WRITE));
+
     log::info!(
         "[EXEC] Prepared image: entry=0x{:x} sp=0x{:x} brk=0x{:x} tls=0x{:x}",
         entry_point,
@@ -215,5 +249,6 @@ pub fn prepare_exec_image(
         stack_pointer,
         initial_brk,
         tls_base,
+        vmas,
     })
 }

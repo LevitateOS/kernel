@@ -24,5 +24,8 @@ pub use mapping::{
     alloc_and_map_heap_page, alloc_and_map_user_range, alloc_zero_map_page, map_user_page,
     map_user_range, user_va_to_kernel_ptr, validate_user_buffer,
 };
-pub use page_table::{copy_user_address_space, create_user_page_table, destroy_user_page_table};
+pub use page_table::{
+    copy_user_address_space, create_user_page_table, destroy_user_page_table,
+    refresh_kernel_mappings,
+};
 pub use stack::{setup_stack_args, setup_user_stack, setup_user_tls};

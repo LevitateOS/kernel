@@ -370,6 +370,7 @@ dependencies = [
  "log",
  "los_error",
  "los_hal",
+ "los_sched",
  "los_utils",
  "los_vfs",
 ]

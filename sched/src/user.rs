@@ -68,6 +68,7 @@ pub mod layout {
 
 use crate::fd_table::SharedFdTable;
 use los_mm::heap::ProcessHeap;
+use los_mm::vma::VmaList;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -143,6 +144,9 @@ pub struct UserTask {
 
     /// TEAM_408: TLS base address (TPIDR_EL0 on AArch64, FS base on x86_64)
     pub tls: usize,
+
+    /// TEAM_455: VMA list tracking mapped regions for fork() support
+    pub vmas: VmaList,
 }
 
 impl UserTask {
@@ -155,6 +159,7 @@ impl UserTask {
     /// * `brk` - Initial program break (end of loaded segments)
     /// * `fd_table` - File descriptor table (inherited or new)
     /// * `tls` - TEAM_408: TLS base address (TPIDR_EL0 on AArch64)
+    /// * `vmas` - TEAM_455: VMA list tracking mapped regions
     pub fn new(
         entry_point: usize,
         user_sp: usize,
@@ -162,6 +167,7 @@ impl UserTask {
         brk: usize,
         fd_table: SharedFdTable,
         tls: usize,
+        vmas: VmaList,
     ) -> Self {
         // Allocate kernel stack for syscall handling
         let kernel_stack_size = 16384; // 16KB kernel stack
@@ -190,7 +196,8 @@ impl UserTask {
             exit_code: 0,
             kernel_stack,
             kernel_stack_top,
-            tls, // TEAM_408: TLS base
+            tls,  // TEAM_408: TLS base
+            vmas, // TEAM_455: VMA list for fork() support
         }
     }
 
