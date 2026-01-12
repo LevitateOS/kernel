@@ -11,6 +11,9 @@ extern crate alloc;
 pub use core::ptr::NonNull;
 pub use virtio_drivers::{Hal, PhysAddr};
 
+// TEAM_462: Import from central constants module
+use crate::mem::constants::PAGE_SIZE;
+
 /// Type alias for static MMIO transport from virtio-drivers
 pub type StaticMmioTransport = virtio_drivers::transport::mmio::MmioTransport<'static>;
 
@@ -30,8 +33,8 @@ unsafe impl Hal for VirtioHal {
         pages: usize,
         _direction: virtio_drivers::BufferDirection,
     ) -> (PhysAddr, NonNull<u8>) {
-        // SAFETY: 4096 is a valid alignment (power of 2), size is pages * 4096
-        let layout = core::alloc::Layout::from_size_align(pages * 4096, 4096)
+        // SAFETY: PAGE_SIZE is a valid alignment (power of 2), size is pages * PAGE_SIZE
+        let layout = core::alloc::Layout::from_size_align(pages * PAGE_SIZE, PAGE_SIZE)
             .expect("TEAM_130: Layout creation failed - invalid page count");
         // SAFETY: layout is valid, alloc_zeroed returns null on OOM
         let ptr = unsafe { alloc::alloc::alloc_zeroed(layout) };
@@ -44,7 +47,7 @@ unsafe impl Hal for VirtioHal {
 
     unsafe fn dma_dealloc(paddr: PhysAddr, _vaddr: NonNull<u8>, pages: usize) -> i32 {
         // SAFETY: Same layout constraints as dma_alloc
-        let layout = core::alloc::Layout::from_size_align(pages * 4096, 4096)
+        let layout = core::alloc::Layout::from_size_align(pages * PAGE_SIZE, PAGE_SIZE)
             .expect("TEAM_130: Layout creation failed - invalid page count");
         let vaddr = crate::arch::mmu::phys_to_virt(paddr as usize);
         // SAFETY: vaddr was allocated by dma_alloc with same layout

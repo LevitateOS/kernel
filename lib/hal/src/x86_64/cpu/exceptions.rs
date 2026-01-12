@@ -198,9 +198,13 @@ extern "C" fn debug_handler(frame: &ExceptionStackFrame) {
 }
 
 extern "C" fn breakpoint_handler(frame: &ExceptionStackFrame) {
-    // Just print for now to verify IDT works
-    // TODO: Use a proper logger once serial/VGA are wired
-    let _ = frame;
+    // Breakpoint (int3) - typically used by debuggers.
+    // Log at trace level and continue execution.
+    log::trace!(
+        "BREAKPOINT at RIP=0x{:x}, RSP=0x{:x}",
+        frame.instruction_pointer,
+        frame.stack_pointer
+    );
 }
 
 extern "C" fn invalid_opcode_handler(frame: &ExceptionStackFrame) {

@@ -8,8 +8,10 @@ use core::sync::atomic::Ordering;
 use crate::SyscallResult;
 use linux_raw_sys::errno::{EINVAL, ENOMEM, ENOSYS};
 use linux_raw_sys::general::{MAP_ANONYMOUS, MAP_FIXED, PROT_EXEC, PROT_READ, PROT_WRITE};
+// TEAM_462: Import page alignment helpers from central constants module
 use los_hal::mmu::{
-    self, PAGE_SIZE, PageAllocator, PageFlags, PageTable, phys_to_virt, tlb_flush_page,
+    self, is_page_aligned, page_align_up, PAGE_SIZE, PageAllocator, PageFlags, PageTable,
+    phys_to_virt, tlb_flush_page,
 };
 use los_mm::FRAME_ALLOCATOR;
 use los_mm::user as mm_user;
@@ -17,13 +19,8 @@ use los_mm::vma::VmaFlags;
 
 // ============================================================================
 // TEAM_415: Helper Functions
+// TEAM_462: page_align_up moved to los_hal::mem::constants
 // ============================================================================
-
-/// TEAM_415: Round up a length to the next page boundary.
-#[inline]
-fn page_align_up(len: usize) -> usize {
-    (len + PAGE_SIZE - 1) & !(PAGE_SIZE - 1)
-}
 
 /// TEAM_415: Get mutable reference to user page table from TTBR0.
 ///
@@ -214,7 +211,8 @@ pub fn sys_mmap(
     let base_addr = if addr != 0 && flags & MAP_FIXED != 0 {
         // MAP_FIXED: use exact address (must be page-aligned)
         log::trace!("[MMAP] MAP_FIXED at addr=0x{:x}", addr);
-        if addr & (PAGE_SIZE - 1) != 0 {
+        // TEAM_462: Use helper function for alignment check
+        if !is_page_aligned(addr) {
             return Err(EINVAL);
         }
         addr
@@ -297,8 +295,8 @@ pub fn sys_mmap(
 /// TEAM_415: Refactored to use helper functions.
 /// TEAM_421: Returns SyscallResult
 pub fn sys_munmap(addr: usize, len: usize) -> SyscallResult {
-    // Validate alignment
-    if addr & 0xFFF != 0 || len == 0 {
+    // TEAM_462: Validate alignment using helper function
+    if !is_page_aligned(addr) || len == 0 {
         return Err(EINVAL);
     }
 
@@ -345,8 +343,8 @@ pub fn sys_munmap(addr: usize, len: usize) -> SyscallResult {
 /// TEAM_415: Refactored to use helper functions.
 /// TEAM_421: Returns SyscallResult
 pub fn sys_mprotect(addr: usize, len: usize, prot: u32) -> SyscallResult {
-    // Validate alignment
-    if addr & (PAGE_SIZE - 1) != 0 || len == 0 {
+    // TEAM_462: Validate alignment using helper function
+    if !is_page_aligned(addr) || len == 0 {
         return Err(EINVAL);
     }
 

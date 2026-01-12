@@ -50,10 +50,11 @@ impl PageFlags {
     }
 }
 
-/// Page size: 4KB
-pub const PAGE_SIZE: usize = 4096;
-/// Page shift (log2 of page size)
-pub const PAGE_SHIFT: usize = 12;
+// TEAM_462: Import from central constants module
+pub use crate::mem::constants::{
+    is_page_aligned, page_align_down, page_align_up, pages_needed, PAGE_MASK, PAGE_SHIFT,
+    PAGE_SIZE,
+};
 
 // Higher-Half Virtual Address Base for x86_64
 pub const KERNEL_VIRT_BASE: usize = 0xFFFFFFFF80000000;

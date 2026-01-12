@@ -105,13 +105,6 @@ pub fn sys_close(fd: usize) -> SyscallResult {
 // TEAM_350: faccessat - Check file accessibility
 // ============================================================================
 
-/// TEAM_419: Access mode flags from linux-raw-sys
-/// TEAM_423: Allow unused - these are public API for future use
-#[allow(unused)]
-pub mod access_mode {
-    pub use linux_raw_sys::general::{F_OK, R_OK, W_OK, X_OK};
-}
-
 /// TEAM_350: sys_faccessat - Check file accessibility.
 /// TEAM_421: Updated to return SyscallResult.
 ///
@@ -121,7 +114,7 @@ pub mod access_mode {
 /// # Arguments
 /// * `dirfd` - Directory file descriptor (AT_FDCWD for cwd)
 /// * `pathname` - Path to check
-/// * `mode` - Access mode (F_OK, R_OK, W_OK, X_OK)
+/// * `mode` - Access mode (0=F_OK, 4=R_OK, 2=W_OK, 1=X_OK from linux-raw-sys)
 /// * `flags` - Flags (AT_SYMLINK_NOFOLLOW, etc.)
 ///
 /// # Returns

@@ -7,7 +7,9 @@ use alloc::vec::Vec;
 
 use crate::FRAME_ALLOCATOR;
 use crate::vma::{VmaFlags, VmaList};
-use los_hal::mmu::{self, ENTRIES_PER_TABLE, MmuError, PAGE_SIZE, PageFlags, PageTable};
+use los_hal::mmu::{
+    self, page_align_down, ENTRIES_PER_TABLE, MmuError, PAGE_SIZE, PageFlags, PageTable,
+};
 use los_hal::traits::PageAllocator;
 
 use super::mapping::map_user_page;
@@ -44,8 +46,8 @@ pub fn create_user_page_table() -> Option<usize> {
         unsafe {
             core::arch::asm!("mov {}, cr3", out(reg) current_root_phys);
         }
-        // Mask out PCID and flags (bits 0-11)
-        let current_root_phys = current_root_phys & !0xFFF;
+        // TEAM_462: Mask out PCID and flags (bits 0-11) using helper
+        let current_root_phys = page_align_down(current_root_phys);
         let current_root_va = mmu::phys_to_virt(current_root_phys);
         // SAFETY: current_root_phys is the active page table and is guaranteed to be valid.
         let current_root = unsafe { &*(current_root_va as *const PageTable) };
@@ -208,8 +210,8 @@ pub fn copy_user_address_space(parent_ttbr0: usize, vmas: &VmaList) -> Option<us
                     }
                 };
 
-                // b. Copy page contents from parent to child
-                let parent_page_va = mmu::phys_to_virt(parent_pa & !0xFFF);
+                // TEAM_462: Copy page contents from parent to child
+                let parent_page_va = mmu::phys_to_virt(page_align_down(parent_pa));
                 let child_page_va = mmu::phys_to_virt(child_pa);
                 // SAFETY: Both addresses point to valid, allocated pages
                 unsafe {
@@ -268,7 +270,8 @@ pub fn refresh_kernel_mappings(child_ttbr0: usize) {
     unsafe {
         core::arch::asm!("mov {}, cr3", out(reg) current_root_phys);
     }
-    let current_root_phys = current_root_phys & !0xFFF;
+    // TEAM_462: Mask out PCID and flags using helper
+    let current_root_phys = page_align_down(current_root_phys);
 
     log::trace!(
         "[FORK] refresh_kernel_mappings: current CR3=0x{:x}, child=0x{:x}",

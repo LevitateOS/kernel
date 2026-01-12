@@ -1,3 +1,4 @@
+use crate::mem::constants::PAGE_SIZE;
 use crate::traits::PageAllocator;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
@@ -31,7 +32,8 @@ impl PageAllocator for EarlyFrameAllocator {
     fn alloc_page(&self) -> Option<usize> {
         loop {
             let current = self.next_free_frame.load(Ordering::SeqCst);
-            let next = current + 4096;
+            // TEAM_462: Use PAGE_SIZE constant instead of magic number
+            let next = current + PAGE_SIZE;
 
             if next > self.end_address {
                 return None;
@@ -42,8 +44,8 @@ impl PageAllocator for EarlyFrameAllocator {
                 .compare_exchange(current, next, Ordering::SeqCst, Ordering::SeqCst)
                 .is_ok()
             {
-                // Return the physical address of the allocated 4KB frame
-                // Ensure it is 4KB aligned (should be if start was aligned)
+                // Return the physical address of the allocated PAGE_SIZE frame
+                // Ensure it is page-aligned (should be if start was aligned)
                 return Some(current);
             }
         }
@@ -56,6 +58,8 @@ impl PageAllocator for EarlyFrameAllocator {
 }
 
 // TEAM_302: IA32_STAR and early range are critical for syscall/MMU stability.
-// CAUTION: The EARLY_ALLOCATOR range (frame_alloc.rs) must exactly match
-// the reservation in kernel/src/memory/mod.rs to avoid physical memory corruption.
-pub static EARLY_ALLOCATOR: EarlyFrameAllocator = EarlyFrameAllocator::new(0x800000, 0x1000000);
+// CAUTION: The EARLY_ALLOCATOR range must exactly match the reservation in
+// kernel memory initialization to avoid physical memory corruption.
+// TEAM_464: Use named constants from mem::constants SSOT.
+use crate::mem::constants::{EARLY_ALLOC_START, EARLY_ALLOC_END};
+pub static EARLY_ALLOCATOR: EarlyFrameAllocator = EarlyFrameAllocator::new(EARLY_ALLOC_START, EARLY_ALLOC_END);

@@ -10,6 +10,8 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 use bitflags::bitflags;
+// TEAM_462: Import from central constants module
+use los_hal::mmu::is_page_aligned;
 
 bitflags! {
     /// VMA permission flags (matches mmap prot flags).
@@ -40,8 +42,9 @@ impl Vma {
     #[must_use]
     pub fn new(start: usize, end: usize, flags: VmaFlags) -> Self {
         debug_assert!(start < end, "VMA start must be < end");
-        debug_assert!(start & 0xFFF == 0, "VMA start must be page-aligned");
-        debug_assert!(end & 0xFFF == 0, "VMA end must be page-aligned");
+        // TEAM_462: Use helper function for page alignment check
+        debug_assert!(is_page_aligned(start), "VMA start must be page-aligned");
+        debug_assert!(is_page_aligned(end), "VMA end must be page-aligned");
         Self { start, end, flags }
     }
 
@@ -517,5 +520,97 @@ mod tests {
         // Use page-aligned addresses
         assert!(list.insert(Vma::new(0x3000, 0x5000, VmaFlags::READ)).is_err());
         assert!(list.insert(Vma::new(0x0000, 0x3000, VmaFlags::READ)).is_err());
+    }
+
+    // === TEAM_462: Tests for is_page_aligned helper usage ===
+
+    #[test]
+    fn test_is_page_aligned_import() {
+        // Verify is_page_aligned is accessible through los_hal::mmu
+        use los_hal::mmu::is_page_aligned;
+
+        assert!(is_page_aligned(0x0));
+        assert!(is_page_aligned(0x1000));
+        assert!(is_page_aligned(0x2000));
+        assert!(!is_page_aligned(0x1));
+        assert!(!is_page_aligned(0xFFF));
+        assert!(!is_page_aligned(0x1001));
+    }
+
+    #[test]
+    fn test_vma_requires_page_alignment() {
+        // VMA::new has debug_assert for page alignment
+        // In release builds, unaligned addresses would be accepted
+        // but the semantic contract is that VMAs must be page-aligned
+
+        // These should work (page-aligned)
+        let vma = Vma::new(0x1000, 0x2000, VmaFlags::READ);
+        assert_eq!(vma.start, 0x1000);
+        assert_eq!(vma.end, 0x2000);
+
+        let vma = Vma::new(0x0, 0x1000, VmaFlags::READ);
+        assert_eq!(vma.start, 0x0);
+        assert_eq!(vma.end, 0x1000);
+
+        // Large addresses
+        let vma = Vma::new(0x7FFF_FFFF_F000, 0x8000_0000_0000, VmaFlags::READ);
+        assert_eq!(vma.len(), 0x1000);
+    }
+
+    #[test]
+    fn test_vma_alignment_helper_consistency() {
+        use los_hal::mmu::{is_page_aligned, page_align_down, page_align_up};
+
+        // Verify that helpers are consistent
+        let test_addrs = [0x0, 0x1, 0xFFF, 0x1000, 0x1001, 0x12345678];
+
+        for addr in test_addrs {
+            let down = page_align_down(addr);
+            let up = page_align_up(addr);
+
+            // Aligned results should pass is_page_aligned
+            assert!(is_page_aligned(down), "page_align_down(0x{:x}) = 0x{:x} should be aligned", addr, down);
+            assert!(is_page_aligned(up), "page_align_up(0x{:x}) = 0x{:x} should be aligned", addr, up);
+
+            // down <= addr <= up
+            assert!(down <= addr, "page_align_down should not exceed input");
+            assert!(up >= addr, "page_align_up should not be less than input");
+
+            // If already aligned, down == up == addr
+            if is_page_aligned(addr) {
+                assert_eq!(down, addr);
+                assert_eq!(up, addr);
+            }
+        }
+    }
+
+    #[test]
+    fn test_vma_list_with_realistic_addresses() {
+        // Test VMA list with addresses that might come from real page alignment
+        use los_hal::mmu::{page_align_down, page_align_up};
+
+        let mut list = VmaList::new();
+
+        // Simulate ELF segment: unaligned input, aligned for VMA
+        let elf_start = 0x400078;  // Typical ELF entry point
+        let elf_end = 0x401234;
+        let aligned_start = page_align_down(elf_start);
+        let aligned_end = page_align_up(elf_end);
+
+        list.insert(Vma::new(aligned_start, aligned_end, VmaFlags::READ | VmaFlags::EXEC))
+            .expect("Should insert ELF text segment VMA");
+
+        // Verify the VMA covers the original range
+        assert!(list.find(elf_start).is_some());
+        assert!(list.find(elf_end - 1).is_some());
+
+        // Simulate stack: already page-aligned
+        let stack_bottom = 0x7FFF_FFF7_0000;
+        let stack_top = 0x7FFF_FFFF_0000;
+        list.insert(Vma::new(stack_bottom, stack_top, VmaFlags::READ | VmaFlags::WRITE))
+            .expect("Should insert stack VMA");
+
+        assert!(list.find(stack_bottom).is_some());
+        assert!(list.find(stack_top - 1).is_some());
     }
 }

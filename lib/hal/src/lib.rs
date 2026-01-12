@@ -7,6 +7,7 @@
 pub mod allocator;
 pub mod console;
 pub mod interrupts;
+pub mod mem; // TEAM_462: Central memory constants
 pub mod memory; // TEAM_051: Frame allocator
 pub mod mmu;
 pub mod traits;

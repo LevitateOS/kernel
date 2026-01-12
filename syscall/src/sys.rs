@@ -1,23 +1,20 @@
 // TEAM_142: System syscalls
 // TEAM_421: Returns SyscallResult, no scattered casts
+// TEAM_464: Use linux-raw-sys constants as canonical source
 
 use core::sync::atomic::Ordering;
 use crate::SyscallResult;
 use linux_raw_sys::errno::EFAULT;
+// TEAM_464: Import reboot command constants from linux-raw-sys (u32)
+use linux_raw_sys::general::{
+    LINUX_REBOOT_CMD_RESTART, LINUX_REBOOT_CMD_HALT, LINUX_REBOOT_CMD_CAD_ON,
+    LINUX_REBOOT_CMD_CAD_OFF, LINUX_REBOOT_CMD_POWER_OFF,
+};
 use los_mm::user as mm_user;
 
 /// TEAM_142: Shutdown flags for verbose mode
 pub mod shutdown_flags {
     pub const VERBOSE: u32 = 1;
-}
-
-/// TEAM_453: Linux reboot command constants
-pub mod reboot_cmd {
-    pub const LINUX_REBOOT_CMD_RESTART: u32 = 0x01234567;
-    pub const LINUX_REBOOT_CMD_HALT: u32 = 0xcdef0123;
-    pub const LINUX_REBOOT_CMD_CAD_ON: u32 = 0x89abcdef;
-    pub const LINUX_REBOOT_CMD_CAD_OFF: u32 = 0x00000000;
-    pub const LINUX_REBOOT_CMD_POWER_OFF: u32 = 0x4321fedc;
 }
 
 /// TEAM_142: sys_shutdown - Handle Linux reboot syscall.
@@ -29,8 +26,6 @@ pub mod reboot_cmd {
 /// - CAD_ON: Enable Ctrl+Alt+Del - just return success  
 /// - HALT/POWER_OFF/RESTART: Actually shutdown
 pub fn sys_shutdown(cmd: u32) -> SyscallResult {
-    use reboot_cmd::*;
-    
     match cmd {
         LINUX_REBOOT_CMD_CAD_OFF => {
             // TEAM_453: BusyBox init calls this to disable Ctrl+Alt+Del
@@ -102,37 +97,19 @@ pub fn sys_shutdown(cmd: u32) -> SyscallResult {
 // TEAM_350: Eyra Prerequisites - getrandom
 // ============================================================================
 
-/// TEAM_350: Kernel PRNG state.
-///
-/// Simple xorshift64* PRNG seeded from timer at first use.
-/// Not cryptographically secure, but sufficient for HashMap seeds.
-static PRNG_STATE: los_hal::IrqSafeLock<u64> = los_hal::IrqSafeLock::new(0);
+use core::sync::atomic::AtomicBool;
 
-/// TEAM_350: Initialize or get PRNG state.
-fn get_prng_state() -> u64 {
-    let mut state = PRNG_STATE.lock();
-    if *state == 0 {
-        // Seed from timer counter + memory address for entropy
+/// Track if PRNG has been seeded from timer.
+static PRNG_SEEDED: AtomicBool = AtomicBool::new(false);
+
+/// Ensure PRNG is seeded with timer entropy (called on first use).
+fn ensure_prng_seeded() {
+    if !PRNG_SEEDED.swap(true, Ordering::Relaxed) {
+        // Seed from timer counter + stack address for entropy
         let timer = crate::time::uptime_seconds();
-        let addr_entropy = &state as *const _ as u64;
-        *state = timer ^ addr_entropy ^ 0x853c_49e6_748f_ea9b;
-        if *state == 0 {
-            *state = 0x853c_49e6_748f_ea9b; // Fallback non-zero seed
-        }
+        let addr_entropy = &timer as *const _ as u64;
+        los_utils::entropy::seed(timer ^ addr_entropy);
     }
-    *state
-}
-
-/// TEAM_350: Update PRNG state and return next value.
-fn next_random() -> u64 {
-    let mut state = PRNG_STATE.lock();
-    // xorshift64*
-    let mut x = *state;
-    x ^= x >> 12;
-    x ^= x << 25;
-    x ^= x >> 27;
-    *state = x;
-    x.wrapping_mul(0x2545_f491_4f6c_dd1d)
 }
 
 /// TEAM_350: sys_getrandom - Get random bytes.
@@ -168,7 +145,7 @@ pub fn sys_getrandom(buf: usize, buflen: usize, flags: u32) -> SyscallResult {
     }
 
     // Initialize PRNG if needed
-    let _ = get_prng_state();
+    ensure_prng_seeded();
 
     // TEAM_416: Replace unwrap() with proper error handling for panic safety
     let dest = match mm_user::user_va_to_kernel_ptr(task.ttbr0.load(Ordering::Acquire), buf) {
@@ -176,16 +153,18 @@ pub fn sys_getrandom(buf: usize, buflen: usize, flags: u32) -> SyscallResult {
         None => return Err(EFAULT),
     };
 
-    // Fill buffer with random bytes
+    // Fill buffer with random bytes using shared entropy module
     let mut written = 0usize;
     while written < buflen {
-        let rand_val = next_random();
+        let rand_val = los_utils::entropy::next_u64();
         let rand_bytes = rand_val.to_ne_bytes();
 
         for &byte in rand_bytes.iter() {
             if written >= buflen {
                 break;
             }
+            // SAFETY: dest is valid from user_va_to_kernel_ptr check above,
+            // and we're writing within validated buffer bounds.
             unsafe {
                 *dest.add(written) = byte;
             }

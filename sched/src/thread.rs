@@ -23,6 +23,8 @@ use los_arch_x86_64::{Context, SyscallFrame, exception_return};
 use crate::fd_table;
 use crate::user::Pid;
 use crate::{SignalAction, TaskControlBlock, TaskId, TaskState, current_task};
+// TEAM_464: Use linux-raw-sys constants as canonical source
+use linux_raw_sys::general::CLONE_FILES;
 
 /// TEAM_230: Error type for thread creation.
 #[derive(Debug)]
@@ -30,9 +32,6 @@ pub enum ThreadError {
     /// Failed to allocate kernel stack
     AllocationFailed,
 }
-
-/// TEAM_443: CLONE_FILES flag - share file descriptor table.
-const CLONE_FILES: u32 = 0x00000400;
 
 /// TEAM_230: Create a new thread sharing the parent's address space.
 ///

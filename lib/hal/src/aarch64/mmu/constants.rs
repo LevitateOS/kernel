@@ -2,10 +2,11 @@
 //!
 //! Contains page sizes, kernel addresses, device addresses, and block sizes.
 
-/// Page size: 4KB
-pub const PAGE_SIZE: usize = 4096;
-/// Page shift (log2 of page size)
-pub const PAGE_SHIFT: usize = 12;
+// TEAM_462: Import from central constants module
+pub use crate::mem::constants::{
+    is_page_aligned, page_align_down, page_align_up, pages_needed, PAGE_MASK, PAGE_SHIFT,
+    PAGE_SIZE,
+};
 /// Entries per page table (512 for 4KB pages with 8-byte entries)
 pub const ENTRIES_PER_TABLE: usize = 512;
 

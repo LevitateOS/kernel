@@ -276,6 +276,7 @@ dependencies = [
  "cc",
  "embedded-graphics",
  "limine",
+ "linux-raw-sys",
  "log",
  "los_arch_aarch64",
  "los_arch_x86_64",
@@ -474,6 +475,7 @@ version = "0.1.0"
 dependencies = [
  "bitflags",
  "hashbrown",
+ "linux-raw-sys",
  "log",
  "los_arch_aarch64",
  "los_arch_x86_64",
@@ -516,6 +518,7 @@ name = "los_types"
 version = "0.1.0"
 dependencies = [
  "bitflags",
+ "linux-raw-sys",
 ]
 
 [[package]]
@@ -523,6 +526,7 @@ name = "los_utils"
 version = "0.1.0"
 dependencies = [
  "hashbrown",
+ "linux-raw-sys",
  "spin",
 ]
 

@@ -19,31 +19,20 @@ use linux_raw_sys::errno::{
     EBADF, EFAULT, EFBIG, EINVAL, EIO, EISDIR, EMFILE, ENOENT, ENOSPC, ENOSYS, ENOTTY, EROFS,
     ESPIPE,
 };
+// TEAM_464: Import constants from linux-raw-sys (canonical source)
+use linux_raw_sys::general::{
+    // TEAM_404: lseek whence constants (u32)
+    SEEK_SET, SEEK_CUR, SEEK_END,
+    // TEAM_394: fcntl commands (u32)
+    F_DUPFD, F_GETFD, F_SETFD, F_GETFL, F_SETFL, F_DUPFD_CLOEXEC,
+    F_SETPIPE_SZ, F_GETPIPE_SZ, F_ADD_SEALS, F_GET_SEALS,
+    // TEAM_464: O_RDWR for F_GETFL return value
+    O_RDWR,
+};
+// TEAM_464: Import ioctl constants from linux-raw-sys (u32)
+use linux_raw_sys::ioctl::{TIOCGPGRP, TIOCSPGRP, TIOCSCTTY};
 use los_sched::current_task;
 use los_sched::fd_table::FdType;
-
-// TEAM_404: lseek whence constants
-const SEEK_SET: i32 = 0;
-const SEEK_CUR: i32 = 1;
-const SEEK_END: i32 = 2;
-
-// TEAM_394: Terminal foreground process group ioctls
-const TIOCGPGRP: u64 = 0x540F; // Get foreground process group
-const TIOCSPGRP: u64 = 0x5410; // Set foreground process group
-const TIOCSCTTY: u64 = 0x540E; // Set controlling terminal
-
-// TEAM_394: fcntl commands
-const F_DUPFD: i32 = 0;
-const F_GETFD: i32 = 1;
-const F_SETFD: i32 = 2;
-const F_GETFL: i32 = 3;
-const F_SETFL: i32 = 4;
-// TEAM_438: Linux-specific fcntl commands (base = 1024)
-const F_DUPFD_CLOEXEC: i32 = 1030; // F_LINUX_SPECIFIC_BASE + 6
-const F_SETPIPE_SZ: i32 = 1031;
-const F_GETPIPE_SZ: i32 = 1032;
-const F_ADD_SEALS: i32 = 1033;
-const F_GET_SEALS: i32 = 1034;
 
 /// TEAM_394: sys_fcntl - File control operations.
 ///
@@ -51,7 +40,8 @@ const F_GET_SEALS: i32 = 1034;
 /// Currently supports F_GETFD, F_SETFD, F_GETFL, F_SETFL, F_SETPIPE_SZ, F_GETPIPE_SZ.
 /// TEAM_413: Updated to use is_valid_fd helper.
 /// TEAM_421: Updated to return SyscallResult.
-pub fn sys_fcntl(fd: i32, cmd: i32, arg: usize) -> SyscallResult {
+/// TEAM_464: Updated cmd to u32 to match linux-raw-sys types.
+pub fn sys_fcntl(fd: i32, cmd: u32, arg: usize) -> SyscallResult {
     // TEAM_413: Use is_valid_fd helper for validation
     if !is_valid_fd(fd as usize) {
         return Err(EBADF);
@@ -79,7 +69,8 @@ pub fn sys_fcntl(fd: i32, cmd: i32, arg: usize) -> SyscallResult {
         }
         F_GETFL => {
             // Get file status flags (stub: return O_RDWR)
-            Ok(2) // O_RDWR
+            // TEAM_464: Use O_RDWR constant from linux-raw-sys
+            Ok(O_RDWR as i64)
         }
         F_SETFL => {
             // Set file status flags (stub: ignore)
@@ -225,15 +216,15 @@ pub fn sys_isatty(fd: i32) -> SyscallResult {
 /// TEAM_413: Updated to use get_fd and struct helpers.
 /// TEAM_415: Refactored to use ioctl helper functions.
 /// TEAM_421: Updated to return SyscallResult.
+/// TEAM_464: Updated request to u32 to match linux-raw-sys types.
 ///
 /// Returns 0 on success, errno on failure.
-pub fn sys_ioctl(fd: usize, request: u64, arg: usize) -> SyscallResult {
-    // TEAM_422: Use ioctl constants from arch crate (u64 to match request type)
+pub fn sys_ioctl(fd: usize, request: u32, arg: usize) -> SyscallResult {
+    // TEAM_464: Use ioctl constants from linux-raw-sys (u32)
     // TEAM_447: Added TIOCSWINSZ for setting terminal window size
-    #[cfg(target_arch = "aarch64")]
-    use los_arch_aarch64::{TCGETS, TCSETS, TCSETSF, TCSETSW, TIOCGPTN, TIOCSPTLCK, TIOCGWINSZ, TIOCSWINSZ};
-    #[cfg(target_arch = "x86_64")]
-    use los_arch_x86_64::{TCGETS, TCSETS, TCSETSF, TCSETSW, TIOCGPTN, TIOCSPTLCK, TIOCGWINSZ, TIOCSWINSZ};
+    use linux_raw_sys::ioctl::{
+        TCGETS, TCSETS, TCSETSF, TCSETSW, TIOCGPTN, TIOCSPTLCK, TIOCGWINSZ, TIOCSWINSZ,
+    };
     use los_fs_tty::CONSOLE_TTY;
 
     // TEAM_413: Use get_fd helper
@@ -359,9 +350,10 @@ pub fn sys_ioctl(fd: usize, request: u64, arg: usize) -> SyscallResult {
 /// TEAM_404: sys_lseek - Reposition file offset.
 /// TEAM_413: Updated to use get_fd helper.
 /// TEAM_421: Updated to return SyscallResult.
+/// TEAM_464: Updated whence to u32 to match linux-raw-sys types.
 ///
 /// Returns new offset on success, errno on failure.
-pub fn sys_lseek(fd: usize, offset: i64, whence: i32) -> SyscallResult {
+pub fn sys_lseek(fd: usize, offset: i64, whence: u32) -> SyscallResult {
     use los_vfs::ops::SeekWhence;
 
     // TEAM_413: Use get_fd helper
@@ -369,6 +361,7 @@ pub fn sys_lseek(fd: usize, offset: i64, whence: i32) -> SyscallResult {
 
     match &entry.fd_type {
         FdType::VfsFile(file) => {
+            // TEAM_464: Match against linux-raw-sys SEEK_* constants (u32)
             let seek_whence = match whence {
                 SEEK_SET => SeekWhence::Set,
                 SEEK_CUR => SeekWhence::Cur,

@@ -8,8 +8,10 @@ use super::super::intrusive_list::ListNode;
 use core::ptr::NonNull;
 use core::sync::atomic::{AtomicU64, Ordering};
 
+// TEAM_462: Re-export from central constants module
+pub use crate::mem::constants::PAGE_SIZE;
+
 /// [SP1] Page size is 4096 bytes
-pub const PAGE_SIZE: usize = 4096;
 pub const META_SIZE: usize = 64;
 pub const DATA_SIZE: usize = PAGE_SIZE - META_SIZE;
 

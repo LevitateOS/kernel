@@ -3,6 +3,7 @@
 extern crate alloc;
 
 pub mod cpio;
+pub mod entropy;
 pub mod hex;
 
 // TEAM_211: Re-export spin crate types as our lock API

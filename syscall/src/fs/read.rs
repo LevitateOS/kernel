@@ -287,8 +287,8 @@ fn poll_to_tty() {
 pub fn sys_sendfile(out_fd: i32, in_fd: i32, offset_ptr: usize, count: usize) -> SyscallResult {
     use crate::read_from_user;
     use los_vfs::dispatch::{vfs_read, vfs_seek, vfs_write};
-
-    const SEEK_SET: u32 = 0;
+    // TEAM_464: Use SEEK_SET from linux-raw-sys (canonical source)
+    use linux_raw_sys::general::SEEK_SET;
 
     if count == 0 {
         return Ok(0);

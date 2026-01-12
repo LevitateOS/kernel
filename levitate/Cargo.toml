@@ -43,6 +43,8 @@ limine = "0.5"
 bitflags = { workspace = true }
 virtio-drivers = { workspace = true }
 embedded-graphics = { workspace = true }
+# TEAM_464: Use linux-raw-sys constants as canonical source for errno and signal values
+linux-raw-sys = { version = "0.12.1", default-features = false, features = ["errno", "general", "no_std"] }
 
 [target.'cfg(target_arch = "aarch64")'.dependencies]
 los_arch_aarch64 = { path = "../arch/aarch64" }

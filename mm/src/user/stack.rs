@@ -168,11 +168,9 @@ pub fn setup_stack_args(
 ) -> Result<usize, MmuError> {
     let mut sw = StackWriter::new(ttbr0_phys, stack_top);
 
-    // 0. Write random data for AT_RANDOM
+    // 0. Write random data for AT_RANDOM using shared entropy module
     let mut random_bytes = [0u8; 16];
-    for i in 0..16 {
-        random_bytes[i] = (i * 7) as u8; // TODO: Use actual entropy
-    }
+    los_utils::entropy::fill_bytes(&mut random_bytes);
     sw.write_bytes(&random_bytes)?;
     let random_ptr = sw.sp();
 
@@ -196,26 +194,29 @@ pub fn setup_stack_args(
 
     // 2. Write Auxiliary Vector (auxv) with mandatory entries
     let mut final_auxv = Vec::from(auxv);
+    // TEAM_464: Cast our values to u64 to match AuxEntry field types
+    // AT_* constants are u32 from linux-raw-sys, cast to u64 for AuxEntry
     final_auxv.push(AuxEntry {
-        a_type: AT_PAGESZ,
-        a_val: PAGE_SIZE,
+        a_type: AT_PAGESZ as u64,
+        a_val: PAGE_SIZE as u64,
     });
     final_auxv.push(AuxEntry {
-        a_type: AT_HWCAP,
+        a_type: AT_HWCAP as u64,
         a_val: 0,
     }); // TODO: Pass actual HWCAP
     final_auxv.push(AuxEntry {
-        a_type: AT_RANDOM,
-        a_val: random_ptr,
+        a_type: AT_RANDOM as u64,
+        a_val: random_ptr as u64,
     });
     final_auxv.push(AuxEntry {
-        a_type: AT_NULL,
+        a_type: AT_NULL as u64,
         a_val: 0,
     });
 
+    // TEAM_464: Cast u64 AuxEntry fields to usize for writing
     for entry in final_auxv.iter().rev() {
-        sw.write_usize(entry.a_val)?;
-        sw.write_usize(entry.a_type)?;
+        sw.write_usize(entry.a_val as usize)?;
+        sw.write_usize(entry.a_type as usize)?;
     }
 
     // 3. Write envp[] array (NULL terminated)

@@ -6,12 +6,8 @@ use los_vfs::error::VfsError;
 // TEAM_421: Import SyscallResult
 use crate::{SyscallResult, read_user_cstring, write_to_user_buf};
 use linux_raw_sys::errno::{EBADF, EEXIST, EFAULT, EINVAL, EIO, ENOENT, ENOTDIR};
-use linux_raw_sys::general::AT_FDCWD;
-
-/// TEAM_198: UTIME_NOW constant - set time to current time
-const UTIME_NOW: u64 = 0x3FFFFFFF;
-/// TEAM_198: UTIME_OMIT constant - don't change time
-const UTIME_OMIT: u64 = 0x3FFFFFFE;
+// TEAM_464: Import UTIME_* constants from linux-raw-sys (canonical source, u32)
+use linux_raw_sys::general::{AT_FDCWD, UTIME_NOW, UTIME_OMIT};
 
 /// TEAM_345: sys_utimensat - Linux ABI compatible.
 /// TEAM_421: Updated to return SyscallResult.
@@ -52,16 +48,18 @@ pub fn sys_utimensat(dirfd: i32, pathname: usize, times: usize, _flags: u32) -> 
             times_data[i] = val;
         }
 
-        let atime = if times_data[1] == UTIME_OMIT {
+        // TEAM_464: Cast our u64 values to u32 for comparison with linux-raw-sys constants
+        // (linux-raw-sys uses u32 for UTIME_NOW/UTIME_OMIT)
+        let atime = if times_data[1] as u32 == UTIME_OMIT {
             None
-        } else if times_data[1] == UTIME_NOW {
+        } else if times_data[1] as u32 == UTIME_NOW {
             Some(now)
         } else {
             Some(times_data[0])
         };
-        let mtime = if times_data[3] == UTIME_OMIT {
+        let mtime = if times_data[3] as u32 == UTIME_OMIT {
             None
-        } else if times_data[3] == UTIME_NOW {
+        } else if times_data[3] as u32 == UTIME_NOW {
             Some(now)
         } else {
             Some(times_data[2])

@@ -6,6 +6,8 @@
 
 use crate::boot::{BootInfo, MemoryKind};
 use los_hal::allocator::Page;
+// TEAM_462: Import from central constants module
+use los_hal::mmu::{page_align_down, page_align_up, pages_needed, PAGE_SIZE};
 use los_mm::add_reserved;
 
 /// Maximum number of RAM regions we can track.
@@ -70,14 +72,14 @@ pub fn init(boot_info: &BootInfo) {
         return;
     }
 
-    // Align to page boundaries
-    phys_min &= !0xFFF;
-    phys_max = (phys_max + 0xFFF) & !0xFFF;
+    // TEAM_462: Align to page boundaries using helper functions
+    phys_min = page_align_down(phys_min);
+    phys_max = page_align_up(phys_max);
 
     // Calculate size of page metadata array
-    let total_pages = (phys_max - phys_min) / los_hal::mmu::PAGE_SIZE;
+    let total_pages = (phys_max - phys_min) / PAGE_SIZE;
     let page_array_size = total_pages * core::mem::size_of::<Page>();
-    let page_array_pages = (page_array_size + 0xFFF) / 0x1000;
+    let page_array_pages = pages_needed(page_array_size);
 
     log::info!(
         "[MEM] Physical: 0x{:x} - 0x{:x} ({} pages, {} MB)",

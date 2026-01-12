@@ -8,7 +8,7 @@
 //! - Program Header: 56 bytes each
 //! - AArch64 Machine Type: EM_AARCH64 = 183
 
-use los_hal::mmu::{self, PAGE_SIZE, PageFlags};
+use los_hal::mmu::{self, page_align_down, page_align_up, PAGE_MASK, PAGE_SIZE, PageFlags};
 use los_mm::user as mm_user;
 use los_mm::vma::{Vma, VmaFlags, VmaList};
 
@@ -386,9 +386,9 @@ impl<'a> Elf<'a> {
                 max_vaddr = segment_end;
             }
 
-            // Allocate pages for this segment
-            let page_start = vaddr & !0xFFF;
-            let page_end = (vaddr + memsz + 0xFFF) & !0xFFF;
+            // TEAM_462: Allocate pages for this segment using helper functions
+            let page_start = page_align_down(vaddr);
+            let page_end = page_align_up(vaddr + memsz);
             let num_pages = (page_end - page_start) / PAGE_SIZE;
 
             // Allocate physical pages
@@ -464,8 +464,9 @@ impl<'a> Elf<'a> {
                 // We need to write to the physical pages we just mapped
                 for (i, byte) in src.iter().enumerate() {
                     let dst_va = vaddr + i;
-                    let page_va = dst_va & !0xFFF;
-                    let page_offset = dst_va & 0xFFF;
+                    // TEAM_462: Use helper functions for page alignment
+                    let page_va = page_align_down(dst_va);
+                    let page_offset = dst_va & PAGE_MASK;
 
                     // DEBUG: Print first byte copy attempt
                     if i == 0 {
@@ -519,8 +520,8 @@ impl<'a> Elf<'a> {
             let _ = vma_list.insert(Vma::new(vma_start, vma_end, vma_flags));
         }
 
-        // Calculate initial brk (page-aligned end of loaded segments)
-        let initial_brk = (max_vaddr + 0xFFF) & !0xFFF;
+        // TEAM_462: Calculate initial brk (page-aligned end of loaded segments)
+        let initial_brk = page_align_up(max_vaddr);
 
         // TEAM_354: PIE binaries with experimental-relocate handle their own relocations
         // The kernel just needs to load segments and jump to entry point

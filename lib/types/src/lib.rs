@@ -2,6 +2,8 @@
 //!
 //! TEAM_422: This crate contains types shared across multiple kernel subsystems.
 //! Types here must be architecture-agnostic or properly handle arch differences.
+//!
+//! TEAM_464: Use linux-raw-sys constants as canonical source.
 
 #![no_std]
 
@@ -10,49 +12,20 @@ use bitflags::bitflags;
 // ============================================================================
 // File Mode Constants
 // ============================================================================
+// TEAM_464: Re-export S_* constants from linux-raw-sys as canonical source
 
-/// File type mask
-pub const S_IFMT: u32 = 0o170000;
-/// Regular file
-pub const S_IFREG: u32 = 0o100000;
-/// Directory
-pub const S_IFDIR: u32 = 0o040000;
-/// Character device
-pub const S_IFCHR: u32 = 0o020000;
-/// Block device
-pub const S_IFBLK: u32 = 0o060000;
-/// FIFO (named pipe)
-pub const S_IFIFO: u32 = 0o010000;
-/// Symbolic link
-pub const S_IFLNK: u32 = 0o120000;
-/// Socket
-pub const S_IFSOCK: u32 = 0o140000;
-
-/// Set-user-ID on execution
-pub const S_ISUID: u32 = 0o4000;
-/// Set-group-ID on execution
-pub const S_ISGID: u32 = 0o2000;
-/// Sticky bit
-pub const S_ISVTX: u32 = 0o1000;
-
-/// Owner read permission
-pub const S_IRUSR: u32 = 0o0400;
-/// Owner write permission
-pub const S_IWUSR: u32 = 0o0200;
-/// Owner execute permission
-pub const S_IXUSR: u32 = 0o0100;
-/// Group read permission
-pub const S_IRGRP: u32 = 0o0040;
-/// Group write permission
-pub const S_IWGRP: u32 = 0o0020;
-/// Group execute permission
-pub const S_IXGRP: u32 = 0o0010;
-/// Others read permission
-pub const S_IROTH: u32 = 0o0004;
-/// Others write permission
-pub const S_IWOTH: u32 = 0o0002;
-/// Others execute permission
-pub const S_IXOTH: u32 = 0o0001;
+pub use linux_raw_sys::general::{
+    // File type mask and types
+    S_IFMT, S_IFREG, S_IFDIR, S_IFCHR, S_IFBLK, S_IFIFO, S_IFLNK, S_IFSOCK,
+    // Special bits
+    S_ISUID, S_ISGID, S_ISVTX,
+    // Owner permissions
+    S_IRUSR, S_IWUSR, S_IXUSR,
+    // Group permissions
+    S_IRGRP, S_IWGRP, S_IXGRP,
+    // Others permissions
+    S_IROTH, S_IWOTH, S_IXOTH,
+};
 
 // ============================================================================
 // Stat Structure - Architecture Specific

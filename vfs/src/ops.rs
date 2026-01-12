@@ -245,32 +245,34 @@ impl SeekWhence {
 }
 
 /// TEAM_202: Poll events bitmask
+/// TEAM_464: Use linux-raw-sys constants as canonical source.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct PollEvents(u32);
 
 impl PollEvents {
-    pub const POLLIN: u32 = 0x0001;
-    pub const POLLOUT: u32 = 0x0004;
-    pub const POLLERR: u32 = 0x0008;
-    pub const POLLHUP: u32 = 0x0010;
+    // TEAM_464: Re-export linux-raw-sys constants for convenience
+    pub const POLLIN: u32 = linux_raw_sys::general::POLLIN;
+    pub const POLLOUT: u32 = linux_raw_sys::general::POLLOUT;
+    pub const POLLERR: u32 = linux_raw_sys::general::POLLERR;
+    pub const POLLHUP: u32 = linux_raw_sys::general::POLLHUP;
 
     pub const fn empty() -> Self {
         Self(0)
     }
 
     pub const fn readable() -> Self {
-        Self(Self::POLLIN)
+        Self(linux_raw_sys::general::POLLIN)
     }
 
     pub const fn writable() -> Self {
-        Self(Self::POLLOUT)
+        Self(linux_raw_sys::general::POLLOUT)
     }
 
     pub fn is_readable(&self) -> bool {
-        self.0 & Self::POLLIN != 0
+        self.0 & linux_raw_sys::general::POLLIN != 0
     }
 
     pub fn is_writable(&self) -> bool {
-        self.0 & Self::POLLOUT != 0
+        self.0 & linux_raw_sys::general::POLLOUT != 0
     }
 }

@@ -170,10 +170,11 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
         #[cfg(target_arch = "x86_64")]
         Some(SyscallNumber::Lstat) => fs::sys_lstat(frame.arg0() as usize, frame.arg1() as usize),
         // TEAM_404: File positioning and descriptor syscalls
+        // TEAM_464: whence parameter changed to u32 to match linux-raw-sys
         Some(SyscallNumber::Lseek) => fs::sys_lseek(
             frame.arg0() as usize,
             frame.arg1() as i64,
-            frame.arg2() as i32,
+            frame.arg2() as u32,
         ),
         Some(SyscallNumber::Pread64) => fs::sys_pread64(
             frame.arg0() as usize,
@@ -315,7 +316,8 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
             frame.arg4() as u32,
         ),
         // TEAM_216: Signal Handling syscalls
-        Some(SyscallNumber::Kill) => signal::sys_kill(frame.arg0() as i32, frame.arg1() as i32),
+        // TEAM_464: sig parameter changed to u32 to match linux-raw-sys
+        Some(SyscallNumber::Kill) => signal::sys_kill(frame.arg0() as i32, frame.arg1() as u32),
         // TEAM_406: System identification and permissions
         Some(SyscallNumber::Uname) => process::sys_uname(frame.arg0() as usize),
         Some(SyscallNumber::Umask) => process::sys_umask(frame.arg0() as u32),
@@ -348,15 +350,17 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
         ),
         Some(SyscallNumber::Pause) => signal::sys_pause(),
         // TEAM_441: rt_sigaction takes 4 args: sig, act, oldact, sigsetsize
+        // TEAM_464: sig parameter changed to u32 to match linux-raw-sys
         Some(SyscallNumber::SigAction) => signal::sys_sigaction(
-            frame.arg0() as i32,
+            frame.arg0() as u32,
             frame.arg1() as usize,
             frame.arg2() as usize,
             frame.arg3() as usize,
         ),
         Some(SyscallNumber::SigReturn) => signal::sys_sigreturn(frame),
+        // TEAM_464: how parameter changed to u32 to match linux-raw-sys
         Some(SyscallNumber::SigProcMask) => signal::sys_sigprocmask(
-            frame.arg0() as i32,
+            frame.arg0() as u32,
             frame.arg1() as usize,
             frame.arg2() as usize,
         ),
@@ -418,9 +422,10 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
             frame.arg2() as u32,
         ),
         Some(SyscallNumber::Pipe2) => fs::sys_pipe2(frame.arg0() as usize, frame.arg1() as u32),
+        // TEAM_464: request parameter changed to u32 to match linux-raw-sys
         Some(SyscallNumber::Ioctl) => fs::sys_ioctl(
             frame.arg0() as usize,
-            frame.arg1() as u64,
+            frame.arg1() as u32,
             frame.arg2() as usize,
         ),
         // TEAM_350: Eyra prerequisites
@@ -476,9 +481,10 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
             frame.arg2() as u32,
         ),
         // TEAM_350: x86_64-only arch_prctl (aarch64 uses TPIDR_EL0 directly)
+        // TEAM_464: code parameter changed to u32 to match linux-raw-sys
         #[cfg(target_arch = "x86_64")]
         Some(SyscallNumber::ArchPrctl) => {
-            process::sys_arch_prctl(frame.arg0() as i32, frame.arg1() as usize)
+            process::sys_arch_prctl(frame.arg0() as u32, frame.arg1() as usize)
         }
         Some(SyscallNumber::Faccessat) => fs::sys_faccessat(
             frame.arg0() as i32,
@@ -495,10 +501,11 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
             0, // flags = 0 for access()
         ),
         // TEAM_358: Extended file stat
+        // TEAM_464: flags parameter changed to u32 to match linux-raw-sys
         Some(SyscallNumber::Statx) => fs::sys_statx(
             frame.arg0() as i32,
             frame.arg1() as usize,
-            frame.arg2() as i32,
+            frame.arg2() as u32,
             frame.arg3() as u32,
             frame.arg4() as usize,
         ),
@@ -514,7 +521,8 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
             frame.arg2() as usize,
             frame.arg3() as usize,
         ),
-        Some(SyscallNumber::Tkill) => signal::sys_tkill(frame.arg0() as i32, frame.arg1() as i32),
+        // TEAM_464: sig parameter changed to u32 to match linux-raw-sys
+        Some(SyscallNumber::Tkill) => signal::sys_tkill(frame.arg0() as i32, frame.arg1() as u32),
         // TEAM_456: rt_sigtimedwait for BusyBox init signal handling
         #[cfg(target_arch = "x86_64")]
         Some(SyscallNumber::RtSigtimedwait) => signal::sys_rt_sigtimedwait(
@@ -585,9 +593,10 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
             frame.arg4() as usize,
             frame.arg5() as usize,
         ),
+        // TEAM_464: cmd parameter changed to u32 to match linux-raw-sys
         Some(SyscallNumber::Fcntl) => fs::sys_fcntl(
             frame.arg0() as i32,
-            frame.arg1() as i32,
+            frame.arg1() as u32,
             frame.arg2() as usize,
         ),
         // TEAM_409: fstatat and prlimit64 for coreutils

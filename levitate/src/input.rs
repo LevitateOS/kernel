@@ -178,8 +178,9 @@ fn poll_input_device<T: virtio_drivers::transport::Transport>(
                             }
                             // TEAM_241: Signal foreground process immediately on Ctrl+C
                             // This ensures signal is delivered even if no one is reading stdin
+                            // TEAM_464: Use linux-raw-sys SIGINT directly
                             crate::syscall::signal::signal_foreground_process(
-                                crate::syscall::signal::SIGINT,
+                                linux_raw_sys::general::SIGINT,
                             );
                             // TEAM_459: Also feed Ctrl+C to CONSOLE_TTY for proper TTY handling
                             los_fs_tty::CONSOLE_TTY.lock().process_input(0x03);

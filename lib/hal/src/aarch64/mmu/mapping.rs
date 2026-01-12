@@ -3,7 +3,8 @@
 //! Contains page table mapping, translation, and MmuInterface trait implementation.
 
 use super::constants::{
-    BLOCK_1GB_SIZE, BLOCK_2MB_MASK, BLOCK_2MB_SIZE, PAGE_SIZE, phys_to_virt, virt_to_phys,
+    BLOCK_1GB_SIZE, BLOCK_2MB_MASK, BLOCK_2MB_SIZE, PAGE_MASK, PAGE_SIZE, page_align_down,
+    page_align_up, phys_to_virt, virt_to_phys,
 };
 use super::init::{alloc_page_table, switch_ttbr0};
 use super::ops::{tlb_flush_page, va_l0_index, va_l1_index, va_l2_index, va_l3_index};
@@ -166,7 +167,8 @@ pub fn translate(root: &PageTable, va: usize) -> Option<(usize, PageFlags)> {
     }
 
     let pa = entry.address();
-    let offset = va & 0xFFF;
+    // TEAM_462: Use PAGE_MASK constant
+    let offset = va & PAGE_MASK;
     let flags = entry.flags();
 
     Some((pa + offset, flags))
@@ -304,8 +306,9 @@ pub fn identity_map_range(
     end: usize,
     flags: PageFlags,
 ) -> Result<(), MmuError> {
-    let start_page = start & !0xFFF;
-    let end_page = (end + 0xFFF) & !0xFFF;
+    // TEAM_462: Use central page alignment helpers
+    let start_page = page_align_down(start);
+    let end_page = page_align_up(end);
 
     let mut addr = start_page;
     while addr < end_page {
@@ -358,9 +361,10 @@ pub fn map_range(
     len: usize,
     flags: PageFlags,
 ) -> Result<MappingStats, MmuError> {
-    let mut va = va_start & !0xFFF;
-    let mut pa = pa_start & !0xFFF;
-    let end_va = (va_start + len + 0xFFF) & !0xFFF;
+    // TEAM_462: Use central page alignment helpers
+    let mut va = page_align_down(va_start);
+    let mut pa = page_align_down(pa_start);
+    let end_va = page_align_up(va_start + len);
 
     let mut stats = MappingStats {
         blocks_2mb: 0,

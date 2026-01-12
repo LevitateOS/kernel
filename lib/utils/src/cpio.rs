@@ -185,16 +185,10 @@ pub enum CpioEntryType {
 
 impl CpioEntryType {
     /// TEAM_176: Parse entry type from POSIX mode bits.
-    /// S_IFMT = 0o170000 (file type mask)
-    /// S_IFREG = 0o100000 (regular file)
-    /// S_IFDIR = 0o040000 (directory)
-    /// S_IFLNK = 0o120000 (symbolic link)
+    /// TEAM_464: Use linux-raw-sys constants as canonical source.
     #[must_use]
     pub fn from_mode(mode: u32) -> Self {
-        const S_IFMT: u32 = 0o170000;
-        const S_IFREG: u32 = 0o100000;
-        const S_IFDIR: u32 = 0o040000;
-        const S_IFLNK: u32 = 0o120000;
+        use linux_raw_sys::general::{S_IFMT, S_IFREG, S_IFDIR, S_IFLNK};
 
         match mode & S_IFMT {
             S_IFREG => Self::File,
@@ -503,5 +497,58 @@ mod tests {
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].name, "ab");
         assert_eq!(entries[0].data, b"XY"); // [CP10] data correctly located after alignment
+    }
+
+    /// TEAM_464: Tests CpioEntryType::from_mode correctly parses Linux mode bits.
+    /// This tests real behavior using linux-raw-sys S_* constants.
+    #[test]
+    fn test_cpio_entry_type_from_mode() {
+        use linux_raw_sys::general::{S_IFREG, S_IFDIR, S_IFLNK, S_IFCHR, S_IFBLK, S_IFIFO};
+
+        // Regular file: S_IFREG (0o100000) with permissions 0o644
+        let mode_file = S_IFREG | 0o644;
+        assert_eq!(CpioEntryType::from_mode(mode_file), CpioEntryType::File);
+
+        // Directory: S_IFDIR (0o040000) with permissions 0o755
+        let mode_dir = S_IFDIR | 0o755;
+        assert_eq!(CpioEntryType::from_mode(mode_dir), CpioEntryType::Directory);
+
+        // Symbolic link: S_IFLNK (0o120000) with permissions 0o777
+        let mode_symlink = S_IFLNK | 0o777;
+        assert_eq!(CpioEntryType::from_mode(mode_symlink), CpioEntryType::Symlink);
+
+        // Character device: S_IFCHR (0o020000) -> Other
+        let mode_chr = S_IFCHR | 0o666;
+        assert_eq!(CpioEntryType::from_mode(mode_chr), CpioEntryType::Other);
+
+        // Block device: S_IFBLK (0o060000) -> Other
+        let mode_blk = S_IFBLK | 0o660;
+        assert_eq!(CpioEntryType::from_mode(mode_blk), CpioEntryType::Other);
+
+        // FIFO: S_IFIFO (0o010000) -> Other
+        let mode_fifo = S_IFIFO | 0o644;
+        assert_eq!(CpioEntryType::from_mode(mode_fifo), CpioEntryType::Other);
+    }
+
+    /// TEAM_464: Tests that mode masks work correctly with S_IFMT.
+    /// Verifies linux-raw-sys S_IFMT constant extracts file type correctly.
+    #[test]
+    fn test_mode_masking_with_ifmt() {
+        use linux_raw_sys::general::{S_IFMT, S_IFREG, S_IFDIR};
+
+        // Regular file with various permissions should still be detected as file
+        let permissions = [0o000, 0o644, 0o755, 0o777, 0o400];
+        for perm in permissions {
+            let mode = S_IFREG | perm;
+            assert_eq!(mode & S_IFMT, S_IFREG, "S_IFMT mask should extract S_IFREG");
+            assert_eq!(CpioEntryType::from_mode(mode), CpioEntryType::File);
+        }
+
+        // Directory with various permissions should still be detected as directory
+        for perm in permissions {
+            let mode = S_IFDIR | perm;
+            assert_eq!(mode & S_IFMT, S_IFDIR, "S_IFMT mask should extract S_IFDIR");
+            assert_eq!(CpioEntryType::from_mode(mode), CpioEntryType::Directory);
+        }
     }
 }

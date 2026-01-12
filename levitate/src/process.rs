@@ -12,7 +12,7 @@ use crate::loader::elf::{Elf, ElfError};
 use crate::task::fd_table::SharedFdTable;
 use crate::task::user::UserTask;
 use los_error::define_kernel_error;
-use los_hal::mmu::{MmuError, PAGE_SIZE};
+use los_hal::mmu::{page_align_down, MmuError, PAGE_SIZE};
 use los_mm::user::{
     AT_BASE, AT_ENTRY, AT_PHDR, AT_PHENT, AT_PHNUM, AuxEntry, create_user_page_table,
     setup_stack_args, setup_user_stack, setup_user_tls,
@@ -86,26 +86,28 @@ pub fn spawn_from_elf(elf_data: &[u8], fd_table: SharedFdTable) -> Result<UserTa
         unsafe { setup_user_stack(ttbr0_phys, USER_STACK_PAGES) }.map_err(SpawnError::Stack)?;
 
     // 5. Build auxiliary vector for the runtime
+    // TEAM_464: Cast values to u64 to match AuxEntry field types
+    // AT_* constants are u32 from linux-raw-sys, cast to u64 for AuxEntry
     let auxv = [
         AuxEntry {
-            a_type: AT_PHDR,
-            a_val: elf.program_headers_vaddr(),
+            a_type: AT_PHDR as u64,
+            a_val: elf.program_headers_vaddr() as u64,
         },
         AuxEntry {
-            a_type: AT_PHENT,
+            a_type: AT_PHENT as u64,
             a_val: 56, // sizeof(Elf64_Phdr)
         },
         AuxEntry {
-            a_type: AT_PHNUM,
-            a_val: elf.program_headers_count(),
+            a_type: AT_PHNUM as u64,
+            a_val: elf.program_headers_count() as u64,
         },
         AuxEntry {
-            a_type: AT_ENTRY,
-            a_val: entry_point,
+            a_type: AT_ENTRY as u64,
+            a_val: entry_point as u64,
         },
         AuxEntry {
-            a_type: AT_BASE,
-            a_val: elf.load_base(),
+            a_type: AT_BASE as u64,
+            a_val: elf.load_base() as u64,
         },
     ];
 
@@ -131,7 +133,8 @@ pub fn spawn_from_elf(elf_data: &[u8], fd_table: SharedFdTable) -> Result<UserTa
     // TLS_BASE_ADDR is 0x100000000000 (from los_mm::user)
     // TEAM_456: Increased from 3 to 8 pages - busybox needs TLS up to 0x100000004000+
     const TLS_PAGES: usize = 8;
-    let tls_start = tls_base & !0xFFF; // Align to page
+    // TEAM_462: Use helper function for page alignment
+    let tls_start = page_align_down(tls_base);
     let tls_end = tls_start + TLS_PAGES * PAGE_SIZE;
     let _ = vmas.insert(Vma::new(tls_start, tls_end, VmaFlags::READ | VmaFlags::WRITE));
 
@@ -191,26 +194,28 @@ pub fn prepare_exec_image(
         unsafe { setup_user_stack(ttbr0_phys, USER_STACK_PAGES) }.map_err(SpawnError::Stack)?;
 
     // 5. Build auxiliary vector for the runtime
+    // TEAM_464: Cast values to u64 to match AuxEntry field types
+    // AT_* constants are u32 from linux-raw-sys, cast to u64 for AuxEntry
     let auxv = [
         AuxEntry {
-            a_type: AT_PHDR,
-            a_val: elf.program_headers_vaddr(),
+            a_type: AT_PHDR as u64,
+            a_val: elf.program_headers_vaddr() as u64,
         },
         AuxEntry {
-            a_type: AT_PHENT,
+            a_type: AT_PHENT as u64,
             a_val: 56, // sizeof(Elf64_Phdr)
         },
         AuxEntry {
-            a_type: AT_PHNUM,
-            a_val: elf.program_headers_count(),
+            a_type: AT_PHNUM as u64,
+            a_val: elf.program_headers_count() as u64,
         },
         AuxEntry {
-            a_type: AT_ENTRY,
-            a_val: entry_point,
+            a_type: AT_ENTRY as u64,
+            a_val: entry_point as u64,
         },
         AuxEntry {
-            a_type: AT_BASE,
-            a_val: elf.load_base(),
+            a_type: AT_BASE as u64,
+            a_val: elf.load_base() as u64,
         },
     ];
 
@@ -233,7 +238,8 @@ pub fn prepare_exec_image(
     // Add TLS VMA
     // TEAM_456: Increased from 3 to 8 pages - busybox needs TLS up to 0x100000004000+
     const TLS_PAGES: usize = 8;
-    let tls_start = tls_base & !0xFFF;
+    // TEAM_462: Use helper function for page alignment
+    let tls_start = page_align_down(tls_base);
     let tls_end = tls_start + TLS_PAGES * PAGE_SIZE;
     let _ = vmas.insert(Vma::new(tls_start, tls_end, VmaFlags::READ | VmaFlags::WRITE));
 

@@ -2,32 +2,26 @@
 //! TEAM_420: Uses linux_raw_sys::errno directly, no shims
 //! TEAM_421: Returns SyscallResult, no scattered casts
 //! TEAM_441: Proper rt_sigaction with arch-specific struct parsing
+//! TEAM_464: Use linux-raw-sys constants as canonical source
 
 use crate::SyscallFrame;
 use crate::SyscallResult;
 use core::sync::atomic::Ordering;
-use linux_raw_sys::errno::{EFAULT, EINVAL, ENOENT, ESRCH};
+use linux_raw_sys::errno::{EFAULT, EINTR, EINVAL, ENOENT, ESRCH};
+// TEAM_464: Import signal constants from linux-raw-sys (u32)
+use linux_raw_sys::general::{
+    SIGINT, SIGKILL, SIGCHLD, SIGCONT,
+    SA_SIGINFO, SA_RESTART, SA_NODEFER,
+    SIG_BLOCK, SIG_UNBLOCK, SIG_SETMASK,
+};
 use los_sched::{TaskState, current_task, scheduler};
 
-/// TEAM_220: Signal constants
-pub const SIGINT: i32 = 2;
-pub const SIGKILL: i32 = 9;
-pub const SIGCHLD: i32 = 17;
-pub const SIGCONT: i32 = 18;
-
-// TEAM_441: Signal action constants (shared across architectures)
+// TEAM_464: SIG_DFL/SIG_IGN are defined as function pointer types in linux-raw-sys,
+// but we use them as usize constants. Keep local definitions matching Linux behavior.
 #[allow(dead_code)]
 pub const SIG_DFL: usize = 0;
 #[allow(dead_code)]
 pub const SIG_IGN: usize = 1;
-
-// TEAM_441: sigaction flags (shared across architectures)
-#[allow(dead_code)]
-pub const SA_SIGINFO: u64 = 0x00000004;
-#[allow(dead_code)]
-pub const SA_RESTART: u64 = 0x10000000;
-#[allow(dead_code)]
-pub const SA_NODEFER: u64 = 0x40000000;
 
 // TEAM_441: SignalAction is defined in los_sched, re-export for convenience
 pub use los_sched::SignalAction;
@@ -71,8 +65,9 @@ use sigaction_arch::*;
 
 /// TEAM_216: Send a signal to a process.
 /// TEAM_421: Returns SyscallResult
-pub fn sys_kill(pid: i32, sig: i32) -> SyscallResult {
-    if sig < 0 || sig >= 32 {
+/// TEAM_464: Updated sig to u32 to match linux-raw-sys types.
+pub fn sys_kill(pid: i32, sig: u32) -> SyscallResult {
+    if sig >= 32 {
         return Err(EINVAL);
     }
 
@@ -94,7 +89,8 @@ pub fn sys_kill(pid: i32, sig: i32) -> SyscallResult {
 }
 
 /// TEAM_220: Send a signal to the current foreground process.
-pub fn signal_foreground_process(sig: i32) {
+/// TEAM_464: Updated sig to u32 to match linux-raw-sys types.
+pub fn signal_foreground_process(sig: u32) {
     let fg_pid = *los_sched::FOREGROUND_PID.lock();
     log::debug!("signal_foreground_process: sig={} fg_pid={}", sig, fg_pid);
     if fg_pid != 0 {
@@ -107,6 +103,7 @@ pub fn signal_foreground_process(sig: i32) {
 
 /// TEAM_216: Wait for any signal to arrive.
 /// TEAM_421: Returns SyscallResult (always returns -EINTR when interrupted)
+/// TEAM_464: Use EINTR constant from linux-raw-sys.
 pub fn sys_pause() -> SyscallResult {
     let task = current_task();
     log::trace!("[SIGNAL] pause() for PID={}", task.id.0);
@@ -117,14 +114,15 @@ pub fn sys_pause() -> SyscallResult {
     scheduler::SCHEDULER.schedule();
 
     // pause() returns only when interrupted by a signal, and always returns -1/EINTR
-    Err(4) // EINTR (Linux standard for pause)
+    Err(EINTR)
 }
 
 /// TEAM_216: Register a signal handler.
 /// TEAM_421: Returns SyscallResult
 /// TEAM_441: Proper rt_sigaction implementation with struct parsing
+/// TEAM_464: Updated sig to u32 to match linux-raw-sys types.
 pub fn sys_sigaction(
-    sig: i32,
+    sig: u32,
     act_ptr: usize,
     oldact_ptr: usize,
     sigsetsize: usize,
@@ -135,7 +133,8 @@ pub fn sys_sigaction(
         return Err(EINVAL);
     }
     // SIGKILL (9) and SIGSTOP (19) cannot have custom handlers
-    if sig == 9 || sig == 19 {
+    // TEAM_464: Use SIGKILL constant from linux-raw-sys
+    if sig == SIGKILL || sig == 19 {
         return Err(EINVAL);
     }
 
@@ -300,6 +299,7 @@ pub fn sys_sigaltstack(ss: usize, old_ss: usize) -> SyscallResult {
 
 /// TEAM_360: Send a signal to a specific thread.
 /// TEAM_421: Returns SyscallResult
+/// TEAM_464: Updated sig to u32 to match linux-raw-sys types.
 ///
 /// Unlike kill() which targets a process, tkill() targets a specific thread
 /// identified by its thread ID (TID).
@@ -310,9 +310,9 @@ pub fn sys_sigaltstack(ss: usize, old_ss: usize) -> SyscallResult {
 ///
 /// # Returns
 /// Ok(0) on success, Err(EINVAL) for invalid args, Err(ESRCH) if thread not found
-pub fn sys_tkill(tid: i32, sig: i32) -> SyscallResult {
+pub fn sys_tkill(tid: i32, sig: u32) -> SyscallResult {
     // Validate signal number
-    if sig < 0 || sig >= 64 {
+    if sig >= 64 {
         return Err(EINVAL);
     }
 
@@ -405,7 +405,8 @@ pub fn sys_rt_sigtimedwait(
 
 /// TEAM_216: Examine and change blocked signals.
 /// TEAM_421: Returns SyscallResult
-pub fn sys_sigprocmask(how: i32, set_addr: usize, oldset_addr: usize) -> SyscallResult {
+/// TEAM_464: Updated how to u32 and use SIG_* constants from linux-raw-sys.
+pub fn sys_sigprocmask(how: u32, set_addr: usize, oldset_addr: usize) -> SyscallResult {
     let task = current_task();
     let ttbr0 = task.ttbr0.load(Ordering::Acquire);
 
@@ -432,17 +433,15 @@ pub fn sys_sigprocmask(how: i32, set_addr: usize, oldset_addr: usize) -> Syscall
             }
         }
 
+        // TEAM_464: Use SIG_* constants from linux-raw-sys
         match how {
-            0 => {
-                // SIG_BLOCK
+            SIG_BLOCK => {
                 task.blocked_signals.fetch_or(mask, Ordering::Release);
             }
-            1 => {
-                // SIG_UNBLOCK
+            SIG_UNBLOCK => {
                 task.blocked_signals.fetch_and(!mask, Ordering::Release);
             }
-            2 => {
-                // SIG_SETMASK
+            SIG_SETMASK => {
                 task.blocked_signals.store(mask, Ordering::Release);
             }
             _ => return Err(EINVAL),

@@ -184,8 +184,9 @@ impl InterruptHandler for TimerHandler {
 
         // TEAM_244: Poll UART for Ctrl+C as fallback for terminal mode
         // QEMU doesn't trigger UART RX interrupts when stdin is piped
+        // TEAM_464: Use linux-raw-sys SIGINT directly
         if los_hal::console::poll_for_ctrl_c() {
-            crate::syscall::signal::signal_foreground_process(crate::syscall::signal::SIGINT);
+            crate::syscall::signal::signal_foreground_process(linux_raw_sys::general::SIGINT);
         }
 
         // TEAM_070: Preemptive scheduling
@@ -204,8 +205,9 @@ impl InterruptHandler for UartHandler {
 
         // TEAM_244: Check if Ctrl+C was received and signal foreground process
         // This enables Ctrl+C to work even when no process is reading stdin
+        // TEAM_464: Use linux-raw-sys SIGINT directly
         if los_hal::console::check_and_clear_ctrl_c() {
-            crate::syscall::signal::signal_foreground_process(crate::syscall::signal::SIGINT);
+            crate::syscall::signal::signal_foreground_process(linux_raw_sys::general::SIGINT);
         }
     }
 }
@@ -453,9 +455,9 @@ fn register_process_hooks() {
 
     // Resolver: reads ELF data from initramfs by path
     // TEAM_456: Now follows symlinks to resolve the actual executable
+    // TEAM_464: Use linux-raw-sys constants as canonical source for errno values
     fn resolve_executable(path: &str) -> Result<alloc::vec::Vec<u8>, u32> {
-        const ENOENT: u32 = 2;  // No such file or directory
-        const ELOOP: u32 = 40;  // Too many symlinks
+        use linux_raw_sys::errno::{ENOENT, ELOOP};
         const MAX_SYMLINK_DEPTH: usize = 8;
 
         let archive_lock = crate::fs::INITRAMFS.lock();

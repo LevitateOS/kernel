@@ -10,7 +10,9 @@ use super::page::Page;
 // TEAM_158: Added behavior ID traceability [B1]-[B11]
 
 pub const MAX_ORDER: usize = 21; // Up to 8GB (2^21 * 4KB)
-pub const PAGE_SIZE: usize = 4096;
+
+// TEAM_462: Import from central constants module
+pub use crate::mem::constants::PAGE_SIZE;
 
 /// [B1] Buddy Allocator for physical frame management.
 /// Allocator starts with empty free lists.

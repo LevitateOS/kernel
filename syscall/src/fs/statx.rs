@@ -6,10 +6,9 @@
 use core::sync::atomic::Ordering;
 use crate::SyscallResult;
 use linux_raw_sys::errno::{EBADF, EFAULT, ENOENT};
+// TEAM_464: Import AT_EMPTY_PATH from linux-raw-sys (canonical source, u32)
+use linux_raw_sys::general::AT_EMPTY_PATH;
 use los_mm::user as mm_user;
-
-/// AT_EMPTY_PATH flag for statx
-const AT_EMPTY_PATH: i32 = 0x1000;
 
 /// TEAM_358: statx timestamp (16 bytes)
 #[repr(C)]
@@ -56,6 +55,7 @@ const STATX_BASIC_STATS: u32 = 0x07FF;
 
 /// TEAM_358: sys_statx - Get extended file status.
 /// TEAM_421: Returns SyscallResult
+/// TEAM_464: Updated flags to u32 to match linux-raw-sys types.
 ///
 /// # Arguments
 /// * `dirfd` - Directory file descriptor (or AT_FDCWD)
@@ -66,7 +66,7 @@ const STATX_BASIC_STATS: u32 = 0x07FF;
 pub fn sys_statx(
     dirfd: i32,
     pathname: usize,
-    flags: i32,
+    flags: u32,
     _mask: u32,
     statxbuf: usize,
 ) -> SyscallResult {
@@ -78,7 +78,7 @@ pub fn sys_statx(
         return Err(EFAULT);
     }
 
-    // Handle AT_EMPTY_PATH: use dirfd as the file descriptor
+    // TEAM_464: Handle AT_EMPTY_PATH using linux-raw-sys constant (u32)
     if flags & AT_EMPTY_PATH != 0 {
         return statx_by_fd(dirfd as usize, statxbuf, task.ttbr0.load(Ordering::Acquire));
     }

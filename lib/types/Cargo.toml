@@ -8,3 +8,5 @@ workspace = true
 
 [dependencies]
 bitflags = { workspace = true }
+# TEAM_464: Use linux-raw-sys constants as canonical source for S_* mode constants
+linux-raw-sys = { version = "0.12.1", default-features = false, features = ["general", "no_std"] }

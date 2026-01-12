@@ -18,18 +18,15 @@ use crate::epoll::EventFdState;
 use los_mm::user as mm_user; // TEAM_422: Import for downcasting
 // TEAM_420: Direct linux_raw_sys imports, no shims
 use linux_raw_sys::errno::{EAGAIN, EFAULT, EINVAL};
+// TEAM_464: Import POLL* constants from linux-raw-sys (canonical source, u32)
+use linux_raw_sys::general::{POLLIN, POLLPRI, POLLOUT, POLLERR, POLLHUP, POLLNVAL};
 use los_sched::scheduler::SCHEDULER;
 use los_sched::{TaskControlBlock, TaskState, current_task, yield_now};
 
-// TEAM_360: Poll event constants (matching Linux)
-pub const POLLIN: i16 = 0x0001; // Data to read
-pub const POLLPRI: i16 = 0x0002; // Urgent data
-pub const POLLOUT: i16 = 0x0004; // Writing possible
-pub const POLLERR: i16 = 0x0008; // Error (output only)
-pub const POLLHUP: i16 = 0x0010; // Hang up (output only)
-pub const POLLNVAL: i16 = 0x0020; // Invalid fd (output only)
-
 /// TEAM_360: struct pollfd (8 bytes)
+/// TEAM_464: events/revents are i16 for Linux ABI compatibility, but POLL*
+/// constants from linux-raw-sys are u32. Cast our struct values to u32 for
+/// comparison, and cast our computed u32 results back to i16 for storage.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Pollfd {
@@ -209,17 +206,18 @@ pub fn sys_ppoll(
                 None => return Err(EFAULT),
             };
 
-            // Determine revents based on fd type
-            let revents = if pfd.fd < 0 {
+            // TEAM_464: Determine revents based on fd type
+            // Use u32 for computation, cast result to i16 for struct storage
+            let revents: i16 = if pfd.fd < 0 {
                 // Negative fd: ignore, set revents = 0
-                0i16
+                0
             } else {
                 match fd_table.get(pfd.fd as usize) {
                     None => {
-                        // Invalid fd
-                        POLLNVAL
+                        // Invalid fd - cast our computed result to i16
+                        POLLNVAL as i16
                     }
-                    Some(entry) => poll_fd_type(&entry.fd_type, pfd.events),
+                    Some(entry) => poll_fd_type(&entry.fd_type, pfd.events as u32) as i16,
                 }
             };
 
@@ -277,10 +275,12 @@ fn write_pollfd_revents(ttbr0: usize, addr: usize, revents: i16) -> bool {
 }
 
 /// TEAM_360: Determine poll events for a given fd type
-fn poll_fd_type(fd_type: &los_sched::fd_table::FdType, events: i16) -> i16 {
+/// TEAM_464: Takes u32 events and returns u32 to match linux-raw-sys POLL* types.
+/// Caller is responsible for casting struct fields to/from u32.
+fn poll_fd_type(fd_type: &los_sched::fd_table::FdType, events: u32) -> u32 {
     use los_sched::fd_table::FdType;
 
-    let mut revents: i16 = 0;
+    let mut revents: u32 = 0;
 
     match fd_type {
         FdType::Stdin => {
