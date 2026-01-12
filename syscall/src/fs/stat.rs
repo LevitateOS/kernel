@@ -24,8 +24,9 @@ pub fn sys_fstat(fd: usize, stat_buf: usize) -> SyscallResult {
             Err(e) => return Err(e.to_errno()),
         },
         // TEAM_258: Use constructor for architecture independence
+        // TEAM_446: Changed to i64 for x86_64 ABI compatibility
         FdType::PipeRead(_) | FdType::PipeWrite(_) => {
-            Stat::new_pipe(los_vfs::pipe::PIPE_BUF_SIZE as i32)
+            Stat::new_pipe(los_vfs::pipe::PIPE_BUF_SIZE as i64)
         }
         // TEAM_258: Use constructor for architecture independence
         FdType::PtyMaster(_) | FdType::PtySlave(_) => {

@@ -86,14 +86,13 @@ fn register_spawned_process(new_task: los_sched::user::UserTask) -> i64 {
 
 /// TEAM_414: Write an exit status to a user-space pointer.
 ///
-/// TEAM_446 BREADCRUMB: CONFIRMED - Status encoding is WRONG!
-/// Linux encodes exit status as: (exit_code & 0xFF) << 8
-/// This allows WIFEXITED() and WEXITSTATUS() macros to work correctly.
-/// Current code writes raw exit_code which breaks shell $? variable.
+/// TEAM_446: Fixed to use correct Linux wait status encoding.
+/// Linux encodes the status word as follows:
+/// - Normal exit: (exit_code & 0xFF) << 8
+/// - Killed by signal: signal_number & 0x7F
+/// - Core dumped: signal_number | 0x80
 ///
-/// TODO: Fix encoding:
-///   - Normal exit: (exit_code & 0xFF) << 8
-///   - Signal termination: sig_num & 0x7F (+ 0x80 if core dumped)
+/// This allows WIFEXITED/WEXITSTATUS macros to work correctly.
 fn write_exit_status(ttbr0: usize, status_ptr: usize, exit_code: i32) -> Result<(), u32> {
     if status_ptr == 0 {
         return Ok(());
@@ -106,9 +105,14 @@ fn write_exit_status(ttbr0: usize, status_ptr: usize, exit_code: i32) -> Result<
     match mm_user::user_va_to_kernel_ptr(ttbr0, status_ptr) {
         Some(ptr) => {
             // SAFETY: validate_user_buffer confirmed address is writable
-            // TEAM_446: TODO - encode as (exit_code & 0xFF) << 8 for Linux ABI
+            //
+            // TEAM_446: Encode exit status for Linux ABI compatibility.
+            // For normal exit: bits 8-15 contain the exit code, bits 0-7 are zero.
+            // This makes WIFEXITED(status) return true and WEXITSTATUS(status)
+            // return the actual exit code.
+            let encoded_status = (exit_code & 0xFF) << 8;
             unsafe {
-                *(ptr as *mut i32) = exit_code;
+                *(ptr as *mut i32) = encoded_status;
             }
             Ok(())
         }

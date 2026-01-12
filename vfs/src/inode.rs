@@ -130,6 +130,7 @@ impl Inode {
 
     /// TEAM_202: Convert to Stat structure
     /// TEAM_258: Use constructor for architecture independence
+    /// TEAM_446: Use i64 for blksize for x86_64 ABI compatibility
     pub fn to_stat(&self) -> Stat {
         let size = self.size.load(Ordering::Relaxed);
         Stat::from_inode_data(
@@ -141,7 +142,7 @@ impl Inode {
             self.gid.load(Ordering::Relaxed),
             self.rdev,
             size as i64,
-            self.blksize as i32,
+            self.blksize as i64,
             ((size + 511) / 512) as i64,
             self.atime.load(Ordering::Relaxed) as i64,
             self.mtime.load(Ordering::Relaxed) as i64,

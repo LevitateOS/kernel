@@ -80,6 +80,8 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
         Some(SyscallNumber::Yield) => process::sys_yield(),
         Some(SyscallNumber::Shutdown) => sys::sys_shutdown(frame.arg0() as u32),
         // TEAM_444: Legacy open() - translates to openat(AT_FDCWD, ...)
+        // TEAM_446: x86_64 only - aarch64 doesn't have open() syscall
+        #[cfg(target_arch = "x86_64")]
         Some(SyscallNumber::Open) => fs::sys_openat(
             -100, // AT_FDCWD
             frame.arg0() as usize,
@@ -409,6 +411,8 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
         Some(SyscallNumber::Getpgrp) => process::sys_getpgrp(),
         Some(SyscallNumber::Setsid) => process::sys_setsid(),
         // TEAM_438: Socket syscalls for brush - stub returns pipe pair
+        // TEAM_446: x86_64 only - aarch64 doesn't have socketpair syscall number
+        #[cfg(target_arch = "x86_64")]
         Some(SyscallNumber::Socketpair) => sync::sys_socketpair(
             frame.arg0() as i32,
             frame.arg1() as i32,
@@ -467,7 +471,8 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
     frame.set_return(abi_result);
 }
 
-pub(crate) fn write_to_user_buf(
+/// TEAM_446: Made public for use by levitate crate
+pub fn write_to_user_buf(
     ttbr0: usize,
     user_buf_base: usize,
     offset: usize,

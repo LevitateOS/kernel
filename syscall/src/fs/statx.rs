@@ -123,8 +123,9 @@ fn statx_by_fd(fd: usize, statxbuf: usize, ttbr0: usize) -> SyscallResult {
             Ok(s) => s,
             Err(_) => return Err(EBADF),
         },
+        // TEAM_446: Changed to i64 for x86_64 ABI compatibility
         FdType::PipeRead(_) | FdType::PipeWrite(_) => {
-            crate::Stat::new_pipe(los_vfs::pipe::PIPE_BUF_SIZE as i32)
+            crate::Stat::new_pipe(los_vfs::pipe::PIPE_BUF_SIZE as i64)
         }
         FdType::PtyMaster(_) | FdType::PtySlave(_) => {
             crate::Stat::new_device(los_vfs::mode::S_IFCHR | 0o666, 0)
@@ -140,12 +141,14 @@ fn statx_by_fd(fd: usize, statxbuf: usize, ttbr0: usize) -> SyscallResult {
 }
 
 /// Convert Stat to Statx
+/// TEAM_446: Explicit casts for architecture-specific field types
 fn stat_to_statx(stat: &crate::Stat) -> Statx {
     Statx {
         stx_mask: STATX_BASIC_STATS,
         stx_blksize: stat.st_blksize as u32,
         stx_attributes: 0,
-        stx_nlink: stat.st_nlink,
+        // TEAM_446: st_nlink is u64 on x86_64, u32 on aarch64
+        stx_nlink: stat.st_nlink as u32,
         stx_uid: stat.st_uid,
         stx_gid: stat.st_gid,
         stx_mode: stat.st_mode as u16,
@@ -154,19 +157,20 @@ fn stat_to_statx(stat: &crate::Stat) -> Statx {
         stx_size: stat.st_size as u64,
         stx_blocks: stat.st_blocks as u64,
         stx_attributes_mask: 0,
+        // TEAM_446: st_*time is u64 on x86_64, i64 on aarch64
         stx_atime: StatxTimestamp {
-            tv_sec: stat.st_atime,
+            tv_sec: stat.st_atime as i64,
             tv_nsec: 0,
             __reserved: 0,
         },
         stx_btime: StatxTimestamp::default(), // Birth time not tracked
         stx_ctime: StatxTimestamp {
-            tv_sec: stat.st_ctime,
+            tv_sec: stat.st_ctime as i64,
             tv_nsec: 0,
             __reserved: 0,
         },
         stx_mtime: StatxTimestamp {
-            tv_sec: stat.st_mtime,
+            tv_sec: stat.st_mtime as i64,
             tv_nsec: 0,
             __reserved: 0,
         },
