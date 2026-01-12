@@ -607,7 +607,6 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
             fs::sys_truncate(frame.arg0() as usize, frame.arg1() as i64)
         }
         // TEAM_459: sendfile - copy data between file descriptors
-        #[cfg(target_arch = "x86_64")]
         Some(SyscallNumber::Sendfile) => fs::sys_sendfile(
             frame.arg0() as i32,
             frame.arg1() as i32,
