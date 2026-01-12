@@ -5,6 +5,7 @@
 //! TEAM_421: Updated all functions to return SyscallResult.
 //! TEAM_422: Arc<dyn Any> downcasting for type-erased FdType handles.
 
+use core::sync::atomic::Ordering;
 use los_fs_tty::pty::PtyPair;
 // TEAM_413: Import new syscall helpers
 // TEAM_415: Added ioctl helpers
@@ -154,7 +155,7 @@ pub fn sys_pipe2(pipefd_ptr: usize, _flags: u32) -> SyscallResult {
     let task = current_task();
 
     // Validate user buffer (2 * sizeof(i32) = 8 bytes)
-    if mm_user::validate_user_buffer(task.ttbr0, pipefd_ptr, 8, true).is_err() {
+    if mm_user::validate_user_buffer(task.ttbr0.load(Ordering::Acquire), pipefd_ptr, 8, true).is_err() {
         return Err(EFAULT);
     }
 
@@ -184,7 +185,7 @@ pub fn sys_pipe2(pipefd_ptr: usize, _flags: u32) -> SyscallResult {
 
     // Write fds to user space
     // TEAM_416: Replace unwrap() with proper error handling for panic safety
-    let ptr = match mm_user::user_va_to_kernel_ptr(task.ttbr0, pipefd_ptr) {
+    let ptr = match mm_user::user_va_to_kernel_ptr(task.ttbr0.load(Ordering::Acquire), pipefd_ptr) {
         Some(p) => p,
         None => return Err(EFAULT),
     };
@@ -241,9 +242,9 @@ pub fn sys_ioctl(fd: usize, request: u64, arg: usize) -> SyscallResult {
         FdType::Stdin | FdType::Stdout | FdType::Stderr => match request {
             TCGETS => {
                 let termios = CONSOLE_TTY.lock().termios;
-                ioctl_get_termios(task.ttbr0, arg, &termios)
+                ioctl_get_termios(task.ttbr0.load(Ordering::Acquire), arg, &termios)
             }
-            TCSETS | TCSETSW | TCSETSF => match ioctl_read_termios(task.ttbr0, arg) {
+            TCSETS | TCSETSW | TCSETSF => match ioctl_read_termios(task.ttbr0.load(Ordering::Acquire), arg) {
                 Ok(new_termios) => {
                     CONSOLE_TTY.lock().termios = new_termios;
                     Ok(0)
@@ -252,9 +253,9 @@ pub fn sys_ioctl(fd: usize, request: u64, arg: usize) -> SyscallResult {
             },
             TIOCGPGRP => {
                 let fg_pgid = *los_sched::FOREGROUND_PID.lock();
-                ioctl_write_i32(task.ttbr0, arg, fg_pgid as i32)
+                ioctl_write_i32(task.ttbr0.load(Ordering::Acquire), arg, fg_pgid as i32)
             }
-            TIOCSPGRP => match ioctl_read_i32(task.ttbr0, arg) {
+            TIOCSPGRP => match ioctl_read_i32(task.ttbr0.load(Ordering::Acquire), arg) {
                 Ok(pgid) => {
                     *los_sched::FOREGROUND_PID.lock() = pgid as usize;
                     Ok(0)
@@ -271,7 +272,7 @@ pub fn sys_ioctl(fd: usize, request: u64, arg: usize) -> SyscallResult {
                     core::slice::from_raw_parts(winsize.as_ptr() as *const u8, 8)
                 };
                 for i in 0..8 {
-                    if !crate::write_to_user_buf(task.ttbr0, arg, i, bytes[i]) {
+                    if !crate::write_to_user_buf(task.ttbr0.load(Ordering::Acquire), arg, i, bytes[i]) {
                         return Err(EFAULT);
                     }
                 }
@@ -284,7 +285,7 @@ pub fn sys_ioctl(fd: usize, request: u64, arg: usize) -> SyscallResult {
                 // we have a fixed terminal size. This makes programs happy.
                 let mut bytes = [0u8; 8];
                 for i in 0..8 {
-                    if let Some(b) = crate::read_from_user(task.ttbr0, arg + i) {
+                    if let Some(b) = crate::read_from_user(task.ttbr0.load(Ordering::Acquire), arg + i) {
                         bytes[i] = b;
                     } else {
                         return Err(EFAULT);
@@ -303,8 +304,8 @@ pub fn sys_ioctl(fd: usize, request: u64, arg: usize) -> SyscallResult {
                 None => return Err(EINVAL),
             };
             match request {
-                TIOCGPTN => ioctl_write_u32(task.ttbr0, arg, pair.id as u32),
-                TIOCSPTLCK => match ioctl_read_u32(task.ttbr0, arg) {
+                TIOCGPTN => ioctl_write_u32(task.ttbr0.load(Ordering::Acquire), arg, pair.id as u32),
+                TIOCSPTLCK => match ioctl_read_u32(task.ttbr0.load(Ordering::Acquire), arg) {
                     Ok(val) => {
                         *pair.locked.lock() = val != 0;
                         Ok(0)
@@ -323,9 +324,9 @@ pub fn sys_ioctl(fd: usize, request: u64, arg: usize) -> SyscallResult {
             match request {
                 TCGETS => {
                     let termios = pair.tty.lock().termios;
-                    ioctl_get_termios(task.ttbr0, arg, &termios)
+                    ioctl_get_termios(task.ttbr0.load(Ordering::Acquire), arg, &termios)
                 }
-                TCSETS | TCSETSW | TCSETSF => match ioctl_read_termios(task.ttbr0, arg) {
+                TCSETS | TCSETSW | TCSETSF => match ioctl_read_termios(task.ttbr0.load(Ordering::Acquire), arg) {
                     Ok(new_termios) => {
                         pair.tty.lock().termios = new_termios;
                         Ok(0)
@@ -396,7 +397,7 @@ pub fn sys_chdir(path_ptr: usize) -> SyscallResult {
     let task = current_task();
     let mut path_buf = [0u8; 256];
 
-    let path = crate::read_user_cstring(task.ttbr0, path_ptr, &mut path_buf)?;
+    let path = crate::read_user_cstring(task.ttbr0.load(Ordering::Acquire), path_ptr, &mut path_buf)?;
 
     // Update task's cwd (assume path exists - proper validation TODO)
     let mut cwd = task.cwd.lock();
@@ -433,7 +434,7 @@ pub fn sys_truncate(pathname: usize, length: i64) -> SyscallResult {
 
     // TEAM_418: Use PATH_MAX from SSOT
     let mut path_buf = [0u8; linux_raw_sys::general::PATH_MAX as usize];
-    let path_str = read_user_cstring(task.ttbr0, pathname, &mut path_buf)?;
+    let path_str = read_user_cstring(task.ttbr0.load(Ordering::Acquire), pathname, &mut path_buf)?;
 
     // Look up the file in the VFS
     let dentry = match dcache().lookup(path_str) {
@@ -552,7 +553,7 @@ pub fn sys_pread64(fd: usize, buf_ptr: usize, count: usize, offset: i64) -> Sysc
             }
 
             // Validate user buffer
-            if mm_user::validate_user_buffer(task.ttbr0, buf_ptr, count, true).is_err() {
+            if mm_user::validate_user_buffer(task.ttbr0.load(Ordering::Acquire), buf_ptr, count, true).is_err() {
                 return Err(EFAULT);
             }
 
@@ -562,7 +563,7 @@ pub fn sys_pread64(fd: usize, buf_ptr: usize, count: usize, offset: i64) -> Sysc
                 Ok(n) => {
                     // Copy to user space
                     // TEAM_416: Replace unwrap() with proper error handling for panic safety
-                    let dest = match mm_user::user_va_to_kernel_ptr(task.ttbr0, buf_ptr) {
+                    let dest = match mm_user::user_va_to_kernel_ptr(task.ttbr0.load(Ordering::Acquire), buf_ptr) {
                         Some(p) => p,
                         None => return Err(EFAULT),
                     };
@@ -622,14 +623,14 @@ pub fn sys_pwrite64(fd: usize, buf_ptr: usize, count: usize, offset: i64) -> Sys
             }
 
             // Validate user buffer
-            if mm_user::validate_user_buffer(task.ttbr0, buf_ptr, count, false).is_err() {
+            if mm_user::validate_user_buffer(task.ttbr0.load(Ordering::Acquire), buf_ptr, count, false).is_err() {
                 return Err(EFAULT);
             }
 
             // Copy from user space
             let mut kbuf = alloc::vec![0u8; count];
             // TEAM_416: Replace unwrap() with proper error handling for panic safety
-            let src = match mm_user::user_va_to_kernel_ptr(task.ttbr0, buf_ptr) {
+            let src = match mm_user::user_va_to_kernel_ptr(task.ttbr0.load(Ordering::Acquire), buf_ptr) {
                 Some(p) => p,
                 None => return Err(EFAULT),
             };
@@ -667,7 +668,7 @@ pub fn sys_pwrite64(fd: usize, buf_ptr: usize, count: usize, offset: i64) -> Sys
 fn validate_user_pathname(pathname: usize) -> SyscallResult {
     let task = current_task();
     let mut buf = [0u8; 256];
-    crate::read_user_cstring(task.ttbr0, pathname, &mut buf)?;
+    crate::read_user_cstring(task.ttbr0.load(Ordering::Acquire), pathname, &mut buf)?;
     Ok(0)
 }
 

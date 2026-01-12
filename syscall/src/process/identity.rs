@@ -120,7 +120,7 @@ pub fn sys_getresuid(ruid: usize, euid: usize, suid: usize) -> SyscallResult {
     // Write 0 (root) to all pointers
     for ptr in [ruid, euid, suid] {
         if ptr != 0 {
-            if let Some(kernel_ptr) = mm_user::user_va_to_kernel_ptr(task.ttbr0, ptr) {
+            if let Some(kernel_ptr) = mm_user::user_va_to_kernel_ptr(task.ttbr0.load(Ordering::Acquire), ptr) {
                 // SAFETY: We're writing a valid u32 to a user-provided pointer
                 unsafe {
                     *(kernel_ptr as *mut u32) = 0;
@@ -145,7 +145,7 @@ pub fn sys_getresgid(rgid: usize, egid: usize, sgid: usize) -> SyscallResult {
     // Write 0 (root group) to all pointers
     for ptr in [rgid, egid, sgid] {
         if ptr != 0 {
-            if let Some(kernel_ptr) = mm_user::user_va_to_kernel_ptr(task.ttbr0, ptr) {
+            if let Some(kernel_ptr) = mm_user::user_va_to_kernel_ptr(task.ttbr0.load(Ordering::Acquire), ptr) {
                 // SAFETY: We're writing a valid u32 to a user-provided pointer
                 unsafe {
                     *(kernel_ptr as *mut u32) = 0;
@@ -212,7 +212,7 @@ pub fn sys_uname(buf: usize) -> SyscallResult {
 
     // Validate user buffer
     let size = core::mem::size_of::<Utsname>();
-    if mm_user::validate_user_buffer(task.ttbr0, buf, size, true).is_err() {
+    if mm_user::validate_user_buffer(task.ttbr0.load(Ordering::Acquire), buf, size, true).is_err() {
         return Err(EFAULT);
     }
 
@@ -235,7 +235,7 @@ pub fn sys_uname(buf: usize) -> SyscallResult {
         unsafe { core::slice::from_raw_parts(&utsname as *const Utsname as *const u8, size) };
 
     for (i, &byte) in bytes.iter().enumerate() {
-        if let Some(ptr) = mm_user::user_va_to_kernel_ptr(task.ttbr0, buf + i) {
+        if let Some(ptr) = mm_user::user_va_to_kernel_ptr(task.ttbr0.load(Ordering::Acquire), buf + i) {
             // SAFETY: We validated the buffer above
             unsafe {
                 *ptr = byte;

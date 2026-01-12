@@ -1,3 +1,4 @@
+use core::sync::atomic::Ordering;
 // TEAM_413: Use new syscall helpers
 // TEAM_418: Import time types from SSOT
 // TEAM_420: Direct linux_raw_sys imports, no shims
@@ -60,7 +61,7 @@ pub fn sys_nanosleep(req_ptr: usize, _rem_ptr: usize) -> SyscallResult {
     }
 
     let task = los_sched::current_task();
-    let req: Timespec = read_struct_from_user(task.ttbr0, req_ptr)?;
+    let req: Timespec = read_struct_from_user(task.ttbr0.load(Ordering::Acquire), req_ptr)?;
 
     log::debug!(
         "[SYSCALL] nanosleep: tv_sec={}, tv_nsec={}",
@@ -139,7 +140,7 @@ pub fn sys_clock_getres(clockid: i32, res_buf: usize) -> SyscallResult {
     };
 
     // TEAM_413: Use write_struct_to_user helper
-    write_struct_to_user(task.ttbr0, res_buf, &ts)?;
+    write_struct_to_user(task.ttbr0.load(Ordering::Acquire), res_buf, &ts)?;
     Ok(0)
 }
 
@@ -184,7 +185,7 @@ pub fn sys_gettimeofday(tv: usize, _tz: usize) -> SyscallResult {
     };
 
     // TEAM_413: Use write_struct_to_user helper
-    write_struct_to_user(task.ttbr0, tv, &timeval)?;
+    write_struct_to_user(task.ttbr0.load(Ordering::Acquire), tv, &timeval)?;
     Ok(0)
 }
 
@@ -213,7 +214,7 @@ pub fn sys_clock_nanosleep(clockid: i32, flags: i32, req_ptr: usize, _rem_ptr: u
     }
 
     let task = los_sched::current_task();
-    let req: Timespec = read_struct_from_user(task.ttbr0, req_ptr)?;
+    let req: Timespec = read_struct_from_user(task.ttbr0.load(Ordering::Acquire), req_ptr)?;
 
     log::debug!(
         "[SYSCALL] clock_nanosleep: clockid={}, flags={}, tv_sec={}, tv_nsec={}",
@@ -318,6 +319,6 @@ pub fn sys_clock_gettime(clockid: i32, timespec_buf: usize) -> SyscallResult {
     };
 
     // TEAM_413: Use write_struct_to_user helper
-    write_struct_to_user(task.ttbr0, timespec_buf, &ts)?;
+    write_struct_to_user(task.ttbr0.load(Ordering::Acquire), timespec_buf, &ts)?;
     Ok(0)
 }

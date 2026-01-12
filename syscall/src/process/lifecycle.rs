@@ -185,7 +185,7 @@ pub fn sys_spawn(path_ptr: usize, path_len: usize) -> SyscallResult {
 
     // Read path from user space
     let mut path_buf = [0u8; 256];
-    let path = crate::copy_user_string(task.ttbr0, path_ptr, path_len, &mut path_buf)?;
+    let path = crate::copy_user_string(task.ttbr0.load(Ordering::Acquire), path_ptr, path_len, &mut path_buf)?;
 
     log::trace!("[SYSCALL] spawn('{}')", path);
 
@@ -227,7 +227,7 @@ pub fn sys_exec(path_ptr: usize, path_len: usize) -> SyscallResult {
 
     // TEAM_226: Use safe copy through kernel pointers
     let mut path_buf = [0u8; 256];
-    let path = crate::copy_user_string(task.ttbr0, path_ptr, path_len, &mut path_buf)?;
+    let path = crate::copy_user_string(task.ttbr0.load(Ordering::Acquire), path_ptr, path_len, &mut path_buf)?;
 
     log::trace!("[SYSCALL] exec('{}')", path);
 
@@ -281,16 +281,16 @@ pub fn sys_execve(
     let task = los_sched::current_task();
 
     // 1. Read path (null-terminated C string)
-    let path = read_user_cstring(task.ttbr0, path_ptr, MAX_EXECVE_STRLEN)?;
+    let path = read_user_cstring(task.ttbr0.load(Ordering::Acquire), path_ptr, MAX_EXECVE_STRLEN)?;
     log::trace!("[SYSCALL] execve('{}', argv={:#x}, envp={:#x})", path, argv_ptr, envp_ptr);
 
     // 2. Read argv array
-    let argv_strings = read_user_string_array(task.ttbr0, argv_ptr, MAX_EXECVE_ARGC)?;
+    let argv_strings = read_user_string_array(task.ttbr0.load(Ordering::Acquire), argv_ptr, MAX_EXECVE_ARGC)?;
     let argv_refs: alloc::vec::Vec<&str> = argv_strings.iter().map(|s| s.as_str()).collect();
 
     // 3. Read envp array (can be NULL)
     let envp_strings = if envp_ptr != 0 {
-        read_user_string_array(task.ttbr0, envp_ptr, MAX_EXECVE_ENVC)?
+        read_user_string_array(task.ttbr0.load(Ordering::Acquire), envp_ptr, MAX_EXECVE_ENVC)?
     } else {
         alloc::vec::Vec::new()
     };
@@ -362,6 +362,10 @@ fn execve_internal(
         core::arch::asm!("mov cr3, {}", in(reg) exec_image.ttbr0);
     }
 
+    // TEAM_456: Critical fix - update task.ttbr0 so mmap uses the new page table!
+    // Without this, find_free_mmap_region scans the OLD (forked) page table.
+    task.ttbr0.store(exec_image.ttbr0, Ordering::Release);
+
     // 6. Update TLS register
     #[cfg(target_arch = "aarch64")]
     unsafe {
@@ -411,6 +415,14 @@ fn execve_internal(
             f.r9 = 0;
             f.r10 = 0;
             f.r11 = 0;
+            // TEAM_456: Zero callee-saved registers too - musl's _start uses RBP
+            // without initializing it, causing page faults if garbage remains
+            f.rbx = 0;
+            f.rbp = 0;
+            f.r12 = 0;
+            f.r13 = 0;
+            f.r14 = 0;
+            f.r15 = 0;
         }
     }
 
@@ -521,7 +533,7 @@ pub fn sys_spawn_args(
     let task = los_sched::current_task();
     let mut path_buf = [0u8; 256];
     let path =
-        crate::copy_user_string(task.ttbr0, path_ptr, path_len, &mut path_buf).map_err(|e| {
+        crate::copy_user_string(task.ttbr0.load(Ordering::Acquire), path_ptr, path_len, &mut path_buf).map_err(|e| {
             log::debug!("[SYSCALL] spawn_args: Invalid path: errno={}", e);
             e
         })?;
@@ -532,7 +544,7 @@ pub fn sys_spawn_args(
         Some(size) => size,
         None => return Err(EINVAL),
     };
-    if argc > 0 && mm_user::validate_user_buffer(task.ttbr0, argv_ptr, argv_size, false).is_err() {
+    if argc > 0 && mm_user::validate_user_buffer(task.ttbr0.load(Ordering::Acquire), argv_ptr, argv_size, false).is_err() {
         return Err(EFAULT);
     }
 
@@ -548,7 +560,7 @@ pub fn sys_spawn_args(
             None => return Err(EINVAL),
         };
         let entry = unsafe {
-            let kernel_ptr = mm_user::user_va_to_kernel_ptr(task.ttbr0, entry_ptr);
+            let kernel_ptr = mm_user::user_va_to_kernel_ptr(task.ttbr0.load(Ordering::Acquire), entry_ptr);
             match kernel_ptr {
                 Some(p) => *(p as *const UserArgvEntry),
                 None => return Err(EFAULT),
@@ -557,7 +569,7 @@ pub fn sys_spawn_args(
 
         let arg_len = entry.len.min(MAX_ARG_LEN);
         let mut arg_buf = [0u8; MAX_ARG_LEN];
-        let arg_str = crate::copy_user_string(task.ttbr0, entry.ptr, arg_len, &mut arg_buf)?;
+        let arg_str = crate::copy_user_string(task.ttbr0.load(Ordering::Acquire), entry.ptr, arg_len, &mut arg_buf)?;
         args.push(alloc::string::String::from(arg_str));
     }
 
@@ -620,7 +632,7 @@ pub fn sys_waitpid(pid: i32, status_ptr: usize) -> SyscallResult {
     if pid == -1 {
         // Try to find any exited child
         if let Some((child_pid, exit_code)) = los_sched::process_table::try_wait_any() {
-            let _ = write_exit_status(current.ttbr0, status_ptr, exit_code);
+            let _ = write_exit_status(current.ttbr0.load(Ordering::Acquire), status_ptr, exit_code);
             los_sched::process_table::reap_zombie(child_pid);
             return Ok(child_pid as i64);
         }
@@ -632,7 +644,7 @@ pub fn sys_waitpid(pid: i32, status_ptr: usize) -> SyscallResult {
 
         // Woken up - try again to find exited child
         if let Some((child_pid, exit_code)) = los_sched::process_table::try_wait_any() {
-            let _ = write_exit_status(current.ttbr0, status_ptr, exit_code);
+            let _ = write_exit_status(current.ttbr0.load(Ordering::Acquire), status_ptr, exit_code);
             los_sched::process_table::reap_zombie(child_pid);
             return Ok(child_pid as i64);
         }
@@ -652,7 +664,7 @@ pub fn sys_waitpid(pid: i32, status_ptr: usize) -> SyscallResult {
     // Check if child already exited
     if let Some(exit_code) = los_sched::process_table::try_wait(pid) {
         // TEAM_414: Use helper to write exit status (ignores errors for compat)
-        let _ = write_exit_status(current.ttbr0, status_ptr, exit_code);
+        let _ = write_exit_status(current.ttbr0.load(Ordering::Acquire), status_ptr, exit_code);
         los_sched::process_table::reap_zombie(pid);
         return Ok(pid as i64);
     }
@@ -668,7 +680,7 @@ pub fn sys_waitpid(pid: i32, status_ptr: usize) -> SyscallResult {
 
     // Woken up - child exited
     if let Some(exit_code) = los_sched::process_table::try_wait(pid) {
-        let _ = write_exit_status(current.ttbr0, status_ptr, exit_code);
+        let _ = write_exit_status(current.ttbr0.load(Ordering::Acquire), status_ptr, exit_code);
         los_sched::process_table::reap_zombie(pid);
         return Ok(pid as i64);
     }

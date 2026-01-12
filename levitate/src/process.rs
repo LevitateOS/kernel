@@ -127,9 +127,10 @@ pub fn spawn_from_elf(elf_data: &[u8], fd_table: SharedFdTable) -> Result<UserTa
     let stack_bottom = stack_top - stack_size;
     let _ = vmas.insert(Vma::new(stack_bottom, stack_top, VmaFlags::READ | VmaFlags::WRITE));
 
-    // Add TLS VMA (3 pages allocated by setup_user_tls at TLS_BASE_ADDR)
+    // Add TLS VMA (pages allocated by setup_user_tls at TLS_BASE_ADDR)
     // TLS_BASE_ADDR is 0x100000000000 (from los_mm::user)
-    const TLS_PAGES: usize = 3;
+    // TEAM_456: Increased from 3 to 8 pages - busybox needs TLS up to 0x100000004000+
+    const TLS_PAGES: usize = 8;
     let tls_start = tls_base & !0xFFF; // Align to page
     let tls_end = tls_start + TLS_PAGES * PAGE_SIZE;
     let _ = vmas.insert(Vma::new(tls_start, tls_end, VmaFlags::READ | VmaFlags::WRITE));
@@ -230,7 +231,8 @@ pub fn prepare_exec_image(
     let _ = vmas.insert(Vma::new(stack_bottom, stack_top, VmaFlags::READ | VmaFlags::WRITE));
 
     // Add TLS VMA
-    const TLS_PAGES: usize = 3;
+    // TEAM_456: Increased from 3 to 8 pages - busybox needs TLS up to 0x100000004000+
+    const TLS_PAGES: usize = 8;
     let tls_start = tls_base & !0xFFF;
     let tls_end = tls_start + TLS_PAGES * PAGE_SIZE;
     let _ = vmas.insert(Vma::new(tls_start, tls_end, VmaFlags::READ | VmaFlags::WRITE));

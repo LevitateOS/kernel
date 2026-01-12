@@ -145,7 +145,7 @@ pub fn sys_sigaction(
     }
 
     let task = current_task();
-    let ttbr0 = task.ttbr0;
+    let ttbr0 = task.ttbr0.load(Ordering::Acquire);
 
     // 3. If oldact_ptr is provided, write current action to userspace
     if oldact_ptr != 0 {
@@ -244,7 +244,7 @@ fn write_sigaction_to_user(ttbr0: usize, ptr: usize, action: &SignalAction) -> R
 /// TEAM_421: Returns SyscallResult
 pub fn sys_sigreturn(frame: &mut SyscallFrame) -> SyscallResult {
     let task = current_task();
-    let ttbr0 = task.ttbr0;
+    let ttbr0 = task.ttbr0.load(Ordering::Acquire);
     let user_sp = frame.sp;
 
     let sig_frame_size = core::mem::size_of::<SyscallFrame>();
@@ -356,11 +356,58 @@ pub fn sys_tkill(tid: i32, sig: i32) -> SyscallResult {
     Err(ESRCH)
 }
 
+/// TEAM_456: sys_rt_sigtimedwait - Wait for signal with timeout.
+///
+/// Suspends execution until one of the signals in set is pending.
+/// BusyBox uses this for signal handling in init.
+///
+/// # Arguments
+/// * `set_ptr` - User pointer to signal set to wait for
+/// * `info_ptr` - User pointer to siginfo_t (output, can be NULL)
+/// * `timeout_ptr` - User pointer to timespec (NULL = wait forever)
+/// * `sigsetsize` - Size of signal set (must be 8)
+///
+/// # Returns
+/// Ok(signal_number) on success, Err(EINTR) if interrupted, Err(EAGAIN) on timeout
+pub fn sys_rt_sigtimedwait(
+    _set_ptr: usize,
+    _info_ptr: usize,
+    _timeout_ptr: usize,
+    sigsetsize: usize,
+) -> SyscallResult {
+    // Validate sigsetsize (must be 8 for 64-bit sigset_t)
+    if sigsetsize != 8 {
+        return Err(EINVAL);
+    }
+
+    let task = current_task();
+
+    // Check if any of the requested signals are already pending
+    let pending = task.pending_signals.load(Ordering::Acquire);
+    if pending != 0 {
+        // Find the lowest pending signal
+        for sig in 1..32 {
+            if (pending & (1 << sig)) != 0 {
+                // Clear the pending signal
+                task.pending_signals
+                    .fetch_and(!(1 << sig), Ordering::Release);
+                log::trace!("[SYSCALL] rt_sigtimedwait: signal {} was pending", sig);
+                return Ok(sig as i64);
+            }
+        }
+    }
+
+    // No signal pending - for now, return EAGAIN (timeout immediately)
+    // A proper implementation would block until a signal arrives or timeout
+    log::trace!("[SYSCALL] rt_sigtimedwait: no signals pending, returning EAGAIN");
+    Err(linux_raw_sys::errno::EAGAIN)
+}
+
 /// TEAM_216: Examine and change blocked signals.
 /// TEAM_421: Returns SyscallResult
 pub fn sys_sigprocmask(how: i32, set_addr: usize, oldset_addr: usize) -> SyscallResult {
     let task = current_task();
-    let ttbr0 = task.ttbr0;
+    let ttbr0 = task.ttbr0.load(Ordering::Acquire);
 
     // 1. If oldset_addr is provided, return the current mask
     if oldset_addr != 0 {

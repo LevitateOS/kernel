@@ -65,8 +65,12 @@ pub fn create_fork(tf: &SyscallFrame) -> Result<Arc<TaskControlBlock>, ForkError
     let parent_vmas = (*parent.vmas.lock()).clone();
 
     // 2. Copy the entire address space (creates new page table with copied pages)
-    let child_ttbr0 = los_mm::user::copy_user_address_space(parent.ttbr0, &parent_vmas)
-        .ok_or(ForkError::AddressSpaceCopyFailed)?;
+    // TEAM_456: Use .load() since ttbr0 is now AtomicUsize
+    let child_ttbr0 = los_mm::user::copy_user_address_space(
+        parent.ttbr0.load(Ordering::Acquire),
+        &parent_vmas,
+    )
+    .ok_or(ForkError::AddressSpaceCopyFailed)?;
 
     log::info!("[FORK] Copied address space, child_ttbr0=0x{:x}", child_ttbr0);
 
@@ -155,7 +159,8 @@ pub fn create_fork(tf: &SyscallFrame) -> Result<Arc<TaskControlBlock>, ForkError
         stack_top: kernel_stack_top,
         stack_size: kernel_stack_size,
         // TEAM_432: Child gets its OWN page table (copy of parent's)
-        ttbr0: child_ttbr0,
+        // TEAM_456: Use AtomicUsize for ttbr0 to allow execve to update it
+        ttbr0: AtomicUsize::new(child_ttbr0),
         // User state - child continues at same point as parent
         user_sp: tf.sp as usize,
         user_entry: tf.pc as usize,

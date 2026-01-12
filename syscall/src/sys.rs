@@ -1,6 +1,7 @@
 // TEAM_142: System syscalls
 // TEAM_421: Returns SyscallResult, no scattered casts
 
+use core::sync::atomic::Ordering;
 use crate::SyscallResult;
 use linux_raw_sys::errno::EFAULT;
 use los_mm::user as mm_user;
@@ -162,7 +163,7 @@ pub fn sys_getrandom(buf: usize, buflen: usize, flags: u32) -> SyscallResult {
     let task = los_sched::current_task();
 
     // Validate user buffer
-    if mm_user::validate_user_buffer(task.ttbr0, buf, buflen, true).is_err() {
+    if mm_user::validate_user_buffer(task.ttbr0.load(Ordering::Acquire), buf, buflen, true).is_err() {
         return Err(EFAULT);
     }
 
@@ -170,7 +171,7 @@ pub fn sys_getrandom(buf: usize, buflen: usize, flags: u32) -> SyscallResult {
     let _ = get_prng_state();
 
     // TEAM_416: Replace unwrap() with proper error handling for panic safety
-    let dest = match mm_user::user_va_to_kernel_ptr(task.ttbr0, buf) {
+    let dest = match mm_user::user_va_to_kernel_ptr(task.ttbr0.load(Ordering::Acquire), buf) {
         Some(ptr) => ptr,
         None => return Err(EFAULT),
     };

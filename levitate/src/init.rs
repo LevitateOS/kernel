@@ -446,8 +446,11 @@ fn register_process_hooks() {
     };
 
     // Resolver: reads ELF data from initramfs by path
+    // TEAM_456: Now follows symlinks to resolve the actual executable
     fn resolve_executable(path: &str) -> Result<alloc::vec::Vec<u8>, u32> {
-        const ENOENT: u32 = 2; // No such file or directory
+        const ENOENT: u32 = 2;  // No such file or directory
+        const ELOOP: u32 = 40;  // Too many symlinks
+        const MAX_SYMLINK_DEPTH: usize = 8;
 
         let archive_lock = crate::fs::INITRAMFS.lock();
         let Some(sb) = archive_lock.as_ref() else {
@@ -455,13 +458,45 @@ fn register_process_hooks() {
         };
 
         // Strip leading slashes for initramfs lookup
-        let name = path.trim_start_matches('/');
+        let mut current_path = alloc::string::String::from(path.trim_start_matches('/'));
 
-        sb.archive
-            .iter()
-            .find(|e| e.name == name)
-            .map(|e| e.data.to_vec())
-            .ok_or(ENOENT)
+        for _ in 0..MAX_SYMLINK_DEPTH {
+            let entry = sb.archive
+                .iter()
+                .find(|e| e.name == current_path.as_str())
+                .ok_or(ENOENT)?;
+
+            // Check if it's a symlink
+            if entry.entry_type == los_utils::cpio::CpioEntryType::Symlink {
+                // Symlink data contains the target path
+                let target = core::str::from_utf8(entry.data)
+                    .map_err(|_| ENOENT)?;
+
+                // Resolve relative symlinks
+                if target.starts_with('/') {
+                    // Absolute path - strip leading slash
+                    current_path = alloc::string::String::from(target.trim_start_matches('/'));
+                } else {
+                    // Relative path - resolve relative to parent directory
+                    if let Some(parent_end) = current_path.rfind('/') {
+                        let parent = &current_path[..parent_end + 1];
+                        current_path = alloc::string::String::from(parent) + target;
+                    } else {
+                        // No parent directory, target is in same directory
+                        current_path = alloc::string::String::from(target);
+                    }
+                }
+                // Normalize: strip leading slashes that might have appeared
+                current_path = alloc::string::String::from(current_path.trim_start_matches('/'));
+                continue;
+            }
+
+            // Not a symlink - return the data
+            return Ok(entry.data.to_vec());
+        }
+
+        // Too many symlinks
+        Err(ELOOP)
     }
 
     // Spawn hook: creates a UserTask from ELF data

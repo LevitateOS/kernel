@@ -3,6 +3,7 @@
 //! TEAM_435: Scheduler affinity syscalls for sysinfo/brush support.
 //! TEAM_421: Returns SyscallResult, no scattered casts.
 
+use core::sync::atomic::Ordering;
 use crate::SyscallResult;
 use linux_raw_sys::errno::{EFAULT, EINVAL};
 use los_mm::user as mm_user;
@@ -44,13 +45,13 @@ pub fn sys_sched_getaffinity(pid: i32, cpusetsize: usize, mask: usize) -> Syscal
 
     // Validate user buffer
     let write_size = cpusetsize.min(128); // Cap at typical cpu_set_t size
-    if mm_user::validate_user_buffer(task.ttbr0, mask, write_size, true).is_err() {
+    if mm_user::validate_user_buffer(task.ttbr0.load(Ordering::Acquire), mask, write_size, true).is_err() {
         return Err(EFAULT);
     }
 
     // Zero the entire buffer first
     for i in 0..write_size {
-        if let Some(ptr) = mm_user::user_va_to_kernel_ptr(task.ttbr0, mask + i) {
+        if let Some(ptr) = mm_user::user_va_to_kernel_ptr(task.ttbr0.load(Ordering::Acquire), mask + i) {
             // SAFETY: We validated the buffer above
             unsafe {
                 *ptr = 0;
@@ -61,7 +62,7 @@ pub fn sys_sched_getaffinity(pid: i32, cpusetsize: usize, mask: usize) -> Syscal
     }
 
     // Set bit 0 (CPU 0) - LevitateOS is single-CPU
-    if let Some(ptr) = mm_user::user_va_to_kernel_ptr(task.ttbr0, mask) {
+    if let Some(ptr) = mm_user::user_va_to_kernel_ptr(task.ttbr0.load(Ordering::Acquire), mask) {
         // SAFETY: We validated the buffer above
         unsafe {
             *ptr = 1; // Bit 0 set = CPU 0 is in the affinity mask
@@ -105,12 +106,12 @@ pub fn sys_sched_setaffinity(pid: i32, cpusetsize: usize, mask: usize) -> Syscal
 
     // Validate user buffer
     let read_size = cpusetsize.min(128);
-    if mm_user::validate_user_buffer(task.ttbr0, mask, read_size, false).is_err() {
+    if mm_user::validate_user_buffer(task.ttbr0.load(Ordering::Acquire), mask, read_size, false).is_err() {
         return Err(EFAULT);
     }
 
     // Read the first byte to check if CPU 0 is set
-    let first_byte = if let Some(ptr) = mm_user::user_va_to_kernel_ptr(task.ttbr0, mask) {
+    let first_byte = if let Some(ptr) = mm_user::user_va_to_kernel_ptr(task.ttbr0.load(Ordering::Acquire), mask) {
         // SAFETY: We validated the buffer above
         unsafe { *ptr }
     } else {

@@ -52,7 +52,17 @@ pub type SyscallResult = Result<i64, u32>;
 
 pub fn syscall_dispatch(frame: &mut SyscallFrame) {
     let nr = frame.syscall_number();
-    
+
+    // TEAM_456: Debug logging for all syscalls
+    log::debug!(
+        "[SYSCALL] nr={} args=[0x{:x}, 0x{:x}, 0x{:x}, 0x{:x}]",
+        nr,
+        frame.arg0(),
+        frame.arg1(),
+        frame.arg2(),
+        frame.arg3()
+    );
+
     let result = match SyscallNumber::from_u64(nr) {
         Some(SyscallNumber::Read) => fs::sys_read(
             frame.arg0() as usize,
@@ -402,6 +412,14 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
             frame.arg2() as i32,
             frame.arg3() as i32,
         ),
+        // TEAM_456: Legacy access() - translates to faccessat(AT_FDCWD, ...)
+        #[cfg(target_arch = "x86_64")]
+        Some(SyscallNumber::Access) => fs::sys_faccessat(
+            -100, // AT_FDCWD
+            frame.arg0() as usize,
+            frame.arg1() as i32,
+            0, // flags = 0 for access()
+        ),
         // TEAM_358: Extended file stat
         Some(SyscallNumber::Statx) => fs::sys_statx(
             frame.arg0() as i32,
@@ -423,6 +441,14 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
             frame.arg3() as usize,
         ),
         Some(SyscallNumber::Tkill) => signal::sys_tkill(frame.arg0() as i32, frame.arg1() as i32),
+        // TEAM_456: rt_sigtimedwait for BusyBox init signal handling
+        #[cfg(target_arch = "x86_64")]
+        Some(SyscallNumber::RtSigtimedwait) => signal::sys_rt_sigtimedwait(
+            frame.arg0() as usize,
+            frame.arg1() as usize,
+            frame.arg2() as usize,
+            frame.arg3() as usize,
+        ),
         Some(SyscallNumber::PkeyAlloc) => {
             mm::sys_pkey_alloc(frame.arg0() as u32, frame.arg1() as u32)
         }
@@ -469,6 +495,22 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
             frame.arg1() as i32,
             frame.arg2() as i32,
             frame.arg3() as usize,
+        ),
+        // TEAM_456: Socket stubs for BusyBox (no network stack yet)
+        #[cfg(target_arch = "x86_64")]
+        Some(SyscallNumber::Socket) => sync::sys_socket(
+            frame.arg0() as i32,
+            frame.arg1() as i32,
+            frame.arg2() as i32,
+        ),
+        #[cfg(target_arch = "x86_64")]
+        Some(SyscallNumber::Sendto) => sync::sys_sendto(
+            frame.arg0() as i32,
+            frame.arg1() as usize,
+            frame.arg2() as usize,
+            frame.arg3() as i32,
+            frame.arg4() as usize,
+            frame.arg5() as usize,
         ),
         Some(SyscallNumber::Fcntl) => fs::sys_fcntl(
             frame.arg0() as i32,

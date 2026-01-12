@@ -1,3 +1,4 @@
+use core::sync::atomic::Ordering;
 use los_vfs::dispatch::*;
 use los_vfs::error::VfsError;
 use los_vfs::file::OpenFlags;
@@ -22,7 +23,7 @@ pub fn sys_openat(dirfd: i32, pathname: usize, flags: u32, mode: u32) -> Syscall
 
     // TEAM_345: Read null-terminated pathname (Linux ABI)
     let mut path_buf = [0u8; linux_raw_sys::general::PATH_MAX as usize];
-    let path_str = read_user_cstring(task.ttbr0, pathname, &mut path_buf)?;
+    let path_str = read_user_cstring(task.ttbr0.load(Ordering::Acquire), pathname, &mut path_buf)?;
 
     // TEAM_345: Handle dirfd (AT_FDCWD means use cwd)
     // For now, we only support AT_FDCWD - relative paths with other dirfd not yet implemented
@@ -133,7 +134,7 @@ pub fn sys_faccessat(dirfd: i32, pathname: usize, mode: i32, flags: i32) -> Sysc
 
     // TEAM_418: Use PATH_MAX from SSOT
     let mut path_buf = [0u8; linux_raw_sys::general::PATH_MAX as usize];
-    let path_str = read_user_cstring(task.ttbr0, pathname, &mut path_buf)?;
+    let path_str = read_user_cstring(task.ttbr0.load(Ordering::Acquire), pathname, &mut path_buf)?;
 
     log::trace!(
         "[SYSCALL] faccessat(dirfd={}, path='{}', mode=0x{:x}, flags=0x{:x})",

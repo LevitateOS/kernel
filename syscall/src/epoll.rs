@@ -338,7 +338,7 @@ pub fn sys_epoll_create1(flags: i32) -> SyscallResult {
 /// * Ok(0) on success, Err(errno)
 pub fn sys_epoll_ctl(epfd: i32, op: u32, fd: i32, event_ptr: usize) -> SyscallResult {
     let task = current_task();
-    let ttbr0 = task.ttbr0;
+    let ttbr0 = task.ttbr0.load(Ordering::Acquire);
 
     // Read event from user space (not needed for DEL)
     let event = if op != EPOLL_CTL_DEL {
@@ -405,7 +405,7 @@ pub fn sys_epoll_wait(epfd: i32, events_ptr: usize, maxevents: i32, timeout: i32
     }
 
     let task = current_task();
-    let ttbr0 = task.ttbr0;
+    let ttbr0 = task.ttbr0.load(Ordering::Acquire);
 
     // Validate output buffer
     let event_size = core::mem::size_of::<EpollEvent>();

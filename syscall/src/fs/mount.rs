@@ -1,3 +1,4 @@
+use core::sync::atomic::Ordering;
 // TEAM_206: Mount syscalls
 // TEAM_421: Returns SyscallResult, no scattered casts
 
@@ -15,7 +16,7 @@ pub fn sys_mount(
     _data_ptr: usize,
 ) -> SyscallResult {
     let task = los_sched::current_task();
-    let ttbr0 = task.ttbr0;
+    let ttbr0 = task.ttbr0.load(Ordering::Acquire);
 
     // Read source string
     let source = match crate::sys::read_user_string(ttbr0, source_ptr, 256) {
@@ -69,7 +70,7 @@ pub fn sys_mount(
 /// TEAM_421: Returns SyscallResult
 pub fn sys_umount(target_ptr: usize, _flags: usize) -> SyscallResult {
     let task = los_sched::current_task();
-    let ttbr0 = task.ttbr0;
+    let ttbr0 = task.ttbr0.load(Ordering::Acquire);
 
     // Read target string
     let target = match crate::sys::read_user_string(ttbr0, target_ptr, 256) {

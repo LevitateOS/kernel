@@ -45,7 +45,8 @@ pub extern "C" fn task_exit() -> ! {
     if clear_tid != 0 {
         // SAFETY: user_va_to_kernel_ptr verified the address is mapped
         // and belongs to this task's address space (shared via CLONE_VM).
-        if let Some(ptr) = los_mm::user::user_va_to_kernel_ptr(task.ttbr0, clear_tid) {
+        // TEAM_456: Use .load() since ttbr0 is now AtomicUsize
+        if let Some(ptr) = los_mm::user::user_va_to_kernel_ptr(task.ttbr0.load(Ordering::Acquire), clear_tid) {
             unsafe {
                 *(ptr as *mut i32) = 0;
             }
@@ -178,8 +179,10 @@ pub fn switch_to(new_task: Arc<TaskControlBlock>) {
 
         // TEAM_299: Switch Page Tables (CR3/TTBR0)
         // Critical for process isolation. Without this, new task runs in old task's address space.
-        if new_task.ttbr0 != 0 {
-            switch_mmu_config(new_task.ttbr0);
+        // TEAM_456: Use .load() since ttbr0 is now AtomicUsize
+        let new_ttbr0 = new_task.ttbr0.load(Ordering::Acquire);
+        if new_ttbr0 != 0 {
+            switch_mmu_config(new_ttbr0);
         }
 
         // TEAM_454: Debug - log context values before switch
@@ -282,8 +285,8 @@ pub struct TaskControlBlock {
     #[allow(dead_code)]
     pub stack_size: usize,
     /// Physical address of the task's L0 page table.
-    #[allow(dead_code)]
-    pub ttbr0: usize,
+    /// TEAM_456: Made atomic to allow execve to update it from Arc<TCB>
+    pub ttbr0: AtomicUsize,
     /// User stack pointer (SP_EL0)
     pub user_sp: usize,
     /// User entry point
@@ -380,7 +383,7 @@ impl Default for TaskControlBlock {
             stack: None,
             stack_top: 0,
             stack_size: 0,
-            ttbr0: 0,
+            ttbr0: AtomicUsize::new(0),
             user_sp: 0,
             user_entry: 0,
             heap: IrqSafeLock::new(ProcessHeap::new(0)),
@@ -426,7 +429,8 @@ impl From<UserTask> for TaskControlBlock {
             stack: Some(user.kernel_stack),
             stack_top,
             stack_size: 16384, // Standard user kernel stack size
-            ttbr0,
+            // TEAM_456: Use AtomicUsize for ttbr0 to allow execve to update it
+            ttbr0: AtomicUsize::new(ttbr0),
             user_sp,
             user_entry,
             heap: IrqSafeLock::new(heap), // TEAM_166: Wrap in lock for syscall access
@@ -476,7 +480,8 @@ pub fn user_task_entry_wrapper() -> ! {
 
     unsafe {
         // Switch TTBR0 (AArch64) or CR3 (x86_64)
-        switch_mmu_config(task.ttbr0);
+        // TEAM_456: Use .load() since ttbr0 is now AtomicUsize
+        switch_mmu_config(task.ttbr0.load(Ordering::Acquire));
 
         // TEAM_408: Set TLS pointer before entering userspace
         // On AArch64, TPIDR_EL0 must be set before eret or userspace TLS access will fault

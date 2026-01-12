@@ -11,6 +11,7 @@
 //! - `resolve_at_path()`: Proper dirfd resolution for *at() syscalls
 
 extern crate alloc;
+use core::sync::atomic::Ordering;
 
 use alloc::format;
 use alloc::string::String;
@@ -261,7 +262,7 @@ pub fn is_valid_fd(fd: usize) -> bool {
 /// # Example
 /// ```ignore
 /// let stat = Stat { ... };
-/// write_struct_to_user(task.ttbr0, statbuf, &stat)?;
+/// write_struct_to_user(task.ttbr0.load(Ordering::Acquire), statbuf, &stat)?;
 /// ```
 pub fn write_struct_to_user<T: Copy>(ttbr0: usize, user_buf: usize, value: &T) -> Result<(), u32> {
     let size = core::mem::size_of::<T>();
@@ -329,7 +330,7 @@ pub fn resolve_at_path(dirfd: i32, pathname: usize) -> Result<String, u32> {
 
     // TEAM_418: Use PATH_MAX from SSOT
     let mut path_buf = [0u8; linux_raw_sys::general::PATH_MAX as usize];
-    let path_str = read_user_cstring(task.ttbr0, pathname, &mut path_buf)?;
+    let path_str = read_user_cstring(task.ttbr0.load(Ordering::Acquire), pathname, &mut path_buf)?;
 
     // Absolute paths ignore dirfd
     if path_str.starts_with('/') {
@@ -383,7 +384,7 @@ pub fn read_user_path(pathname: usize) -> Result<String, u32> {
     let task = current_task();
     // TEAM_418: Use PATH_MAX from SSOT
     let mut path_buf = [0u8; linux_raw_sys::general::PATH_MAX as usize];
-    let path_str = read_user_cstring(task.ttbr0, pathname, &mut path_buf)?;
+    let path_str = read_user_cstring(task.ttbr0.load(Ordering::Acquire), pathname, &mut path_buf)?;
     Ok(String::from(path_str))
 }
 

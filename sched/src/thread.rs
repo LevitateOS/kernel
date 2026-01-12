@@ -123,7 +123,7 @@ pub fn create_thread(
         stack_top: kernel_stack_top,
         stack_size: kernel_stack_size,
         // TEAM_230: Share parent's page table (key for threads!)
-        ttbr0: parent_ttbr0,
+        ttbr0: AtomicUsize::new(parent_ttbr0),
         // TEAM_230: Child's user-space state - mostly tracked in TrapFrame on stack now
         // But we keep these updated for info/debugging
         user_sp: child_stack,

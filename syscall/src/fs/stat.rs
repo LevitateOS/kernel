@@ -1,3 +1,4 @@
+use core::sync::atomic::Ordering;
 use los_vfs::dispatch::*;
 // TEAM_413: Use new syscall helpers
 // TEAM_421: Import SyscallResult
@@ -39,7 +40,7 @@ pub fn sys_fstat(fd: usize, stat_buf: usize) -> SyscallResult {
     };
 
     // TEAM_413: Use write_struct_to_user helper
-    write_struct_to_user(task.ttbr0, stat_buf, &stat)?;
+    write_struct_to_user(task.ttbr0.load(Ordering::Acquire), stat_buf, &stat)?;
     Ok(0)
 }
 
@@ -64,6 +65,6 @@ pub fn sys_fstatat(dirfd: i32, pathname: usize, stat_buf: usize, _flags: i32) ->
     };
 
     // TEAM_413: Use write_struct_to_user helper
-    write_struct_to_user(task.ttbr0, stat_buf, &stat)?;
+    write_struct_to_user(task.ttbr0.load(Ordering::Acquire), stat_buf, &stat)?;
     Ok(0)
 }

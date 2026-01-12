@@ -4,6 +4,7 @@
 //! TEAM_420: Direct linux_raw_sys imports, no shims
 //! TEAM_421: Return SyscallResult, no scattered casts
 
+use core::sync::atomic::Ordering;
 use crate::SyscallResult;
 use linux_raw_sys::errno::{EINVAL, ENOMEM, ENOSYS};
 use linux_raw_sys::general::{MAP_ANONYMOUS, MAP_FIXED, PROT_EXEC, PROT_READ, PROT_WRITE};
@@ -127,8 +128,8 @@ pub fn sys_sbrk(increment: isize) -> SyscallResult {
 
                 for page in old_page..new_page {
                     let va = page * los_hal::mmu::PAGE_SIZE;
-                    if mm_user::user_va_to_kernel_ptr(task.ttbr0, va).is_none() {
-                        if mm_user::alloc_and_map_heap_page(task.ttbr0, va).is_err() {
+                    if mm_user::user_va_to_kernel_ptr(task.ttbr0.load(Ordering::Acquire), va).is_none() {
+                        if mm_user::alloc_and_map_heap_page(task.ttbr0.load(Ordering::Acquire), va).is_err() {
                             // TEAM_389: Log OOM for debugging (Rule 4: Silence is Golden - use debug level)
                             log::debug!("[OOM] sys_sbrk: failed to allocate page at VA 0x{:x}", va);
                             heap.current = old_break;
@@ -174,6 +175,12 @@ pub fn sys_mmap(
     fd: i32,
     offset: usize,
 ) -> SyscallResult {
+    // TEAM_456: Debug logging for mmap calls
+    log::info!(
+        "[MMAP] Request: addr=0x{:x} len=0x{:x} prot=0x{:x} flags=0x{:x}",
+        addr, len, prot, flags
+    );
+
     // TEAM_228: Validate arguments
     if len == 0 {
         return Err(EINVAL);
@@ -193,7 +200,7 @@ pub fn sys_mmap(
     }
 
     let task = los_sched::current_task();
-    let ttbr0 = task.ttbr0;
+    let ttbr0 = task.ttbr0.load(Ordering::Acquire);
 
     // TEAM_238: Create RAII guard for cleanup on failure
     let mut guard = MmapGuard::new(ttbr0);
@@ -206,6 +213,7 @@ pub fn sys_mmap(
     // Start searching from a reasonable base (0x1000_0000_0000) if no hint
     let base_addr = if addr != 0 && flags & MAP_FIXED != 0 {
         // MAP_FIXED: use exact address (must be page-aligned)
+        log::info!("[MMAP] MAP_FIXED at addr=0x{:x}", addr);
         if addr & (PAGE_SIZE - 1) != 0 {
             return Err(EINVAL);
         }
@@ -213,7 +221,9 @@ pub fn sys_mmap(
     } else {
         // Find a free region - start at a safe mmap area
         // TEAM_228: Use a simple linear search for free space
-        find_free_mmap_region(ttbr0, alloc_len).unwrap_or(0)
+        let found = find_free_mmap_region(ttbr0, alloc_len).unwrap_or(0);
+        log::info!("[MMAP] Found free region at 0x{:x}", found);
+        found
     };
 
     if base_addr == 0 {
@@ -299,7 +309,7 @@ pub fn sys_munmap(addr: usize, len: usize) -> SyscallResult {
     };
 
     let task = los_sched::current_task();
-    let ttbr0 = task.ttbr0;
+    let ttbr0 = task.ttbr0.load(Ordering::Acquire);
 
     // 1. Remove VMA(s) from tracking
     {
@@ -350,7 +360,7 @@ pub fn sys_mprotect(addr: usize, len: usize, prot: u32) -> SyscallResult {
     let new_flags = prot_to_page_flags(prot);
 
     // SAFETY: ttbr0 from task is always valid
-    let l0 = unsafe { get_user_page_table(task.ttbr0) };
+    let l0 = unsafe { get_user_page_table(task.ttbr0.load(Ordering::Acquire)) };
 
     // Walk each page and update protection
     let mut current = addr;

@@ -6,6 +6,7 @@
 //! TEAM_420: Uses linux_raw_sys directly, no shims.
 //! TEAM_432: Added fork() support (full address space copy).
 
+use core::sync::atomic::Ordering;
 use crate::SyscallResult;
 use los_mm::user as mm_user;
 // TEAM_420: Direct imports from linux_raw_sys
@@ -78,7 +79,8 @@ fn clone_thread(
 ) -> SyscallResult {
     // TEAM_230: Get parent task info
     let parent = los_sched::current_task();
-    let parent_ttbr0 = parent.ttbr0;
+    // TEAM_456: Use .load() since ttbr0 is now AtomicUsize
+    let parent_ttbr0 = parent.ttbr0.load(Ordering::Acquire);
 
     // TEAM_230: Determine TLS value
     let thread_tls = if flags & CLONE_SETTLS != 0 { tls } else { 0 };
@@ -172,8 +174,9 @@ fn clone_fork(
     let parent_pid = parent.id.0;
 
     // TEAM_432: Handle CLONE_PARENT_SETTID - write child PID to parent's address
+    // TEAM_456: Use .load() since ttbr0 is now AtomicUsize
     if flags & CLONE_PARENT_SETTID != 0 && parent_tid != 0 {
-        if let Some(ptr) = mm_user::user_va_to_kernel_ptr(parent.ttbr0, parent_tid) {
+        if let Some(ptr) = mm_user::user_va_to_kernel_ptr(parent.ttbr0.load(Ordering::Acquire), parent_tid) {
             // SAFETY: user_va_to_kernel_ptr verified the address is mapped.
             unsafe {
                 *(ptr as *mut i32) = child_pid as i32;
@@ -184,8 +187,9 @@ fn clone_fork(
     // TEAM_432: Handle CLONE_CHILD_SETTID for fork - write to CHILD's address space
     // Unlike threads, fork creates a separate address space, so we need to use
     // the child's ttbr0 for this write.
+    // TEAM_456: Use .load() since ttbr0 is now AtomicUsize
     if flags & CLONE_CHILD_SETTID != 0 && child_tid != 0 {
-        if let Some(ptr) = mm_user::user_va_to_kernel_ptr(child.ttbr0, child_tid) {
+        if let Some(ptr) = mm_user::user_va_to_kernel_ptr(child.ttbr0.load(Ordering::Acquire), child_tid) {
             // SAFETY: user_va_to_kernel_ptr verified the address is mapped
             // in the child's address space.
             unsafe {

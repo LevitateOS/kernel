@@ -88,7 +88,7 @@ fn futex_wait(addr: usize, expected: u32) -> SyscallResult {
     }
 
     let task = current_task();
-    let ttbr0 = task.ttbr0;
+    let ttbr0 = task.ttbr0.load(Ordering::Acquire);
 
     // Read the current value at the user address
     let Some(kernel_ptr) = mm_user::user_va_to_kernel_ptr(ttbr0, addr) else {
@@ -172,7 +172,7 @@ pub fn sys_ppoll(
     _sigmask_ptr: usize,
 ) -> SyscallResult {
     let task = current_task();
-    let ttbr0 = task.ttbr0;
+    let ttbr0 = task.ttbr0.load(Ordering::Acquire);
 
     // Validate nfds (reasonable limit)
     if nfds > 1024 {
@@ -381,7 +381,7 @@ pub fn sys_socketpair(_domain: i32, _type: i32, _protocol: i32, sv_ptr: usize) -
     let task = current_task();
 
     // Validate user buffer (2 * sizeof(i32) = 8 bytes)
-    if mm_user::validate_user_buffer(task.ttbr0, sv_ptr, 8, true).is_err() {
+    if mm_user::validate_user_buffer(task.ttbr0.load(Ordering::Acquire), sv_ptr, 8, true).is_err() {
         return Err(EFAULT);
     }
 
@@ -417,7 +417,7 @@ pub fn sys_socketpair(_domain: i32, _type: i32, _protocol: i32, sv_ptr: usize) -
     };
 
     // Write fds to user space
-    let ptr = match mm_user::user_va_to_kernel_ptr(task.ttbr0, sv_ptr) {
+    let ptr = match mm_user::user_va_to_kernel_ptr(task.ttbr0.load(Ordering::Acquire), sv_ptr) {
         Some(p) => p,
         None => return Err(EFAULT),
     };
@@ -429,4 +429,61 @@ pub fn sys_socketpair(_domain: i32, _type: i32, _protocol: i32, sv_ptr: usize) -
 
     log::trace!("[SYSCALL] socketpair: created fds [{}, {}]", fd0, fd1);
     Ok(0)
+}
+
+// ============================================================================
+// TEAM_456: socket/sendto stubs for BusyBox
+// ============================================================================
+
+/// TEAM_456: sys_socket - Create a socket (stub).
+///
+/// BusyBox may try to create sockets for logging or networking.
+/// Since we don't have a network stack, return EAFNOSUPPORT.
+///
+/// # Arguments
+/// * `domain` - Socket domain (AF_UNIX=1, AF_INET=2, etc.)
+/// * `type_` - Socket type (SOCK_STREAM=1, SOCK_DGRAM=2, etc.)
+/// * `protocol` - Protocol number
+///
+/// # Returns
+/// Err(EAFNOSUPPORT) - address family not supported
+pub fn sys_socket(_domain: i32, _type: i32, _protocol: i32) -> SyscallResult {
+    log::trace!(
+        "[SYSCALL] socket(domain={}, type={}, protocol={}) -> EAFNOSUPPORT",
+        _domain,
+        _type,
+        _protocol
+    );
+    Err(linux_raw_sys::errno::EAFNOSUPPORT)
+}
+
+/// TEAM_456: sys_sendto - Send message on socket (stub).
+///
+/// BusyBox may try to send data to sockets for logging.
+/// Since we don't have sockets, return ENOTSOCK.
+///
+/// # Arguments
+/// * `sockfd` - Socket file descriptor
+/// * `buf` - Buffer containing message
+/// * `len` - Length of message
+/// * `flags` - Send flags
+/// * `dest_addr` - Destination address
+/// * `addrlen` - Length of destination address
+///
+/// # Returns
+/// Err(ENOTSOCK) - fd is not a socket
+pub fn sys_sendto(
+    _sockfd: i32,
+    _buf: usize,
+    _len: usize,
+    _flags: i32,
+    _dest_addr: usize,
+    _addrlen: usize,
+) -> SyscallResult {
+    log::trace!(
+        "[SYSCALL] sendto(sockfd={}, len={}) -> ENOTSOCK",
+        _sockfd,
+        _len
+    );
+    Err(linux_raw_sys::errno::ENOTSOCK)
 }

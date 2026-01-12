@@ -4,6 +4,7 @@
 //! TEAM_417: Extracted from process.rs.
 //! TEAM_421: Returns SyscallResult, no scattered casts.
 
+use core::sync::atomic::Ordering;
 use crate::SyscallResult;
 #[cfg(not(target_arch = "x86_64"))]
 use linux_raw_sys::errno::ENOSYS;
@@ -71,8 +72,8 @@ pub fn sys_arch_prctl(code: i32, addr: usize) -> SyscallResult {
             // TEAM_350: Get FS base register
             let task = los_sched::current_task();
             if addr != 0 {
-                if mm_user::validate_user_buffer(task.ttbr0, addr, 8, true).is_ok() {
-                    if let Some(ptr) = mm_user::user_va_to_kernel_ptr(task.ttbr0, addr) {
+                if mm_user::validate_user_buffer(task.ttbr0.load(Ordering::Acquire), addr, 8, true).is_ok() {
+                    if let Some(ptr) = mm_user::user_va_to_kernel_ptr(task.ttbr0.load(Ordering::Acquire), addr) {
                         let fs_base = task.tls.load(core::sync::atomic::Ordering::Acquire);
                         // SAFETY: validate_user_buffer confirmed address is writable
                         unsafe {
@@ -103,8 +104,8 @@ pub fn sys_arch_prctl(code: i32, addr: usize) -> SyscallResult {
             // TEAM_350: Get GS base - read from MSR
             let task = los_sched::current_task();
             if addr != 0 {
-                if mm_user::validate_user_buffer(task.ttbr0, addr, 8, true).is_ok() {
-                    if let Some(ptr) = mm_user::user_va_to_kernel_ptr(task.ttbr0, addr) {
+                if mm_user::validate_user_buffer(task.ttbr0.load(Ordering::Acquire), addr, 8, true).is_ok() {
+                    if let Some(ptr) = mm_user::user_va_to_kernel_ptr(task.ttbr0.load(Ordering::Acquire), addr) {
                         let gs_base: u64;
                         unsafe {
                             let lo: u32;

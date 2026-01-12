@@ -4,6 +4,7 @@
 //! TEAM_417: Extracted from process.rs.
 //! TEAM_418: Use Timeval from SSOT (syscall/types.rs).
 
+use core::sync::atomic::Ordering;
 use crate::SyscallResult;
 // TEAM_420: Direct linux_raw_sys imports, no shims
 use linux_raw_sys::errno::{EFAULT, EINVAL, ESRCH};
@@ -67,7 +68,7 @@ pub fn sys_getrusage(who: i32, usage: usize) -> SyscallResult {
     let rusage = Rusage::default();
 
     // TEAM_416: Use write_struct_to_user helper instead of unwrap() for panic safety
-    crate::helpers::write_struct_to_user(task.ttbr0, usage, &rusage)?;
+    crate::helpers::write_struct_to_user(task.ttbr0.load(Ordering::Acquire), usage, &rusage)?;
     Ok(0)
 }
 
@@ -168,7 +169,7 @@ pub fn sys_prlimit64(pid: i32, resource: u32, new_limit: usize, old_limit: usize
     // Return old limit if requested
     if old_limit != 0 {
         // TEAM_416: Use write_struct_to_user helper instead of unwrap() for panic safety
-        crate::helpers::write_struct_to_user(task.ttbr0, old_limit, &default_limit)?;
+        crate::helpers::write_struct_to_user(task.ttbr0.load(Ordering::Acquire), old_limit, &default_limit)?;
     }
 
     // Setting new limit is a no-op for now (we don't enforce limits)

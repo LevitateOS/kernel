@@ -148,6 +148,11 @@ pub enum SyscallNumber {
     // TEAM_409: Additional syscalls for coreutils
     Fstatat = 262,   // newfstatat - stat relative to dirfd
     Prlimit64 = 302, // get/set resource limits
+    // TEAM_456: BusyBox syscalls
+    Access = 21,           // Legacy access() - maps to faccessat(AT_FDCWD, ...)
+    Socket = 41,           // Socket creation (stub - no network stack yet)
+    Sendto = 44,           // Send to socket (stub - no network stack yet)
+    RtSigtimedwait = 128,  // Wait for signal with timeout
 
     // === Custom LevitateOS syscalls ===
     Spawn = 1000,
@@ -274,6 +279,11 @@ impl SyscallNumber {
             72 => Some(Self::Fcntl),
             // TEAM_409: Additional syscalls for coreutils
             262 => Some(Self::Fstatat),
+            // TEAM_456: BusyBox syscalls
+            21 => Some(Self::Access),
+            41 => Some(Self::Socket),
+            44 => Some(Self::Sendto),
+            128 => Some(Self::RtSigtimedwait),
             // Custom LevitateOS
             1000 => Some(Self::Spawn),
             1001 => Some(Self::SpawnArgs),

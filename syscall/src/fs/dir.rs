@@ -1,3 +1,4 @@
+use core::sync::atomic::Ordering;
 use los_mm::user as mm_user;
 
 use los_vfs::dispatch::*;
@@ -29,7 +30,7 @@ pub fn sys_getdents(fd: usize, buf: usize, buf_len: usize) -> SyscallResult {
     }
 
     let task = los_sched::current_task();
-    if mm_user::validate_user_buffer(task.ttbr0, buf, buf_len, true).is_err() {
+    if mm_user::validate_user_buffer(task.ttbr0.load(Ordering::Acquire), buf, buf_len, true).is_err() {
         return Err(EFAULT);
     }
 
@@ -77,19 +78,19 @@ pub fn sys_getdents(fd: usize, buf: usize, buf_len: usize) -> SyscallResult {
                         };
 
                         for (i, &byte) in dirent_bytes.iter().enumerate() {
-                            if !write_to_user_buf(task.ttbr0, buf, bytes_written + i, byte) {
+                            if !write_to_user_buf(task.ttbr0.load(Ordering::Acquire), buf, bytes_written + i, byte) {
                                 return Err(EFAULT);
                             }
                         }
 
                         let name_offset = bytes_written + core::mem::size_of::<Dirent64>();
                         for (i, &byte) in name_bytes.iter().enumerate() {
-                            if !write_to_user_buf(task.ttbr0, buf, name_offset + i, byte) {
+                            if !write_to_user_buf(task.ttbr0.load(Ordering::Acquire), buf, name_offset + i, byte) {
                                 return Err(EFAULT);
                             }
                         }
 
-                        if !write_to_user_buf(task.ttbr0, buf, name_offset + name_len, 0) {
+                        if !write_to_user_buf(task.ttbr0.load(Ordering::Acquire), buf, name_offset + name_len, 0) {
                             return Err(EFAULT);
                         }
 
@@ -109,7 +110,7 @@ pub fn sys_getdents(fd: usize, buf: usize, buf_len: usize) -> SyscallResult {
 /// TEAM_421: Updated to return SyscallResult.
 pub fn sys_getcwd(buf: usize, size: usize) -> SyscallResult {
     let task = los_sched::current_task();
-    if mm_user::validate_user_buffer(task.ttbr0, buf, size, true).is_err() {
+    if mm_user::validate_user_buffer(task.ttbr0.load(Ordering::Acquire), buf, size, true).is_err() {
         return Err(EFAULT);
     }
 
@@ -121,7 +122,7 @@ pub fn sys_getcwd(buf: usize, size: usize) -> SyscallResult {
     }
 
     // TEAM_416: Replace unwrap() with proper error handling for panic safety
-    let dest = match mm_user::user_va_to_kernel_ptr(task.ttbr0, buf) {
+    let dest = match mm_user::user_va_to_kernel_ptr(task.ttbr0.load(Ordering::Acquire), buf) {
         Some(p) => p,
         None => return Err(EFAULT),
     };
@@ -143,7 +144,7 @@ pub fn sys_mkdirat(dirfd: i32, pathname: usize, mode: u32) -> SyscallResult {
 
     // TEAM_418: Use PATH_MAX from SSOT
     let mut path_buf = [0u8; linux_raw_sys::general::PATH_MAX as usize];
-    let path_str = crate::read_user_cstring(task.ttbr0, pathname, &mut path_buf)?;
+    let path_str = crate::read_user_cstring(task.ttbr0.load(Ordering::Acquire), pathname, &mut path_buf)?;
 
     // TEAM_345: Handle dirfd
     if dirfd != AT_FDCWD && !path_str.starts_with('/') {
@@ -171,7 +172,7 @@ pub fn sys_unlinkat(dirfd: i32, pathname: usize, flags: u32) -> SyscallResult {
 
     // TEAM_418: Use PATH_MAX from SSOT
     let mut path_buf = [0u8; linux_raw_sys::general::PATH_MAX as usize];
-    let path_str = crate::read_user_cstring(task.ttbr0, pathname, &mut path_buf)?;
+    let path_str = crate::read_user_cstring(task.ttbr0.load(Ordering::Acquire), pathname, &mut path_buf)?;
 
     // TEAM_345: Handle dirfd
     if dirfd != AT_FDCWD && !path_str.starts_with('/') {
@@ -202,11 +203,11 @@ pub fn sys_renameat(olddirfd: i32, oldpath: usize, newdirfd: i32, newpath: usize
 
     // TEAM_418: Use PATH_MAX from SSOT
     let mut old_path_buf = [0u8; linux_raw_sys::general::PATH_MAX as usize];
-    let old_path_str = crate::read_user_cstring(task.ttbr0, oldpath, &mut old_path_buf)?;
+    let old_path_str = crate::read_user_cstring(task.ttbr0.load(Ordering::Acquire), oldpath, &mut old_path_buf)?;
 
     // TEAM_418: Use PATH_MAX from SSOT
     let mut new_path_buf = [0u8; linux_raw_sys::general::PATH_MAX as usize];
-    let new_path_str = crate::read_user_cstring(task.ttbr0, newpath, &mut new_path_buf)?;
+    let new_path_str = crate::read_user_cstring(task.ttbr0.load(Ordering::Acquire), newpath, &mut new_path_buf)?;
 
     // TEAM_345: Handle dirfd
     if (olddirfd != AT_FDCWD && !old_path_str.starts_with('/'))

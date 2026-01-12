@@ -3,6 +3,7 @@
 //!
 //! Extended file stat returning struct statx with additional fields.
 
+use core::sync::atomic::Ordering;
 use crate::SyscallResult;
 use linux_raw_sys::errno::{EBADF, EFAULT, ENOENT};
 use los_mm::user as mm_user;
@@ -73,18 +74,18 @@ pub fn sys_statx(
     let statx_size = core::mem::size_of::<Statx>();
 
     // Validate output buffer
-    if mm_user::validate_user_buffer(task.ttbr0, statxbuf, statx_size, true).is_err() {
+    if mm_user::validate_user_buffer(task.ttbr0.load(Ordering::Acquire), statxbuf, statx_size, true).is_err() {
         return Err(EFAULT);
     }
 
     // Handle AT_EMPTY_PATH: use dirfd as the file descriptor
     if flags & AT_EMPTY_PATH != 0 {
-        return statx_by_fd(dirfd as usize, statxbuf, task.ttbr0);
+        return statx_by_fd(dirfd as usize, statxbuf, task.ttbr0.load(Ordering::Acquire));
     }
 
     // Otherwise, resolve pathname
     let mut path_buf = [0u8; 256];
-    let path = crate::read_user_cstring(task.ttbr0, pathname, &mut path_buf)?;
+    let path = crate::read_user_cstring(task.ttbr0.load(Ordering::Acquire), pathname, &mut path_buf)?;
 
     // Use existing VFS stat function
     use los_vfs::dispatch::vfs_stat;
@@ -98,7 +99,7 @@ pub fn sys_statx(
     let statx = stat_to_statx(&stat);
 
     // Copy to user buffer
-    copy_statx_to_user(task.ttbr0, statxbuf, &statx)
+    copy_statx_to_user(task.ttbr0.load(Ordering::Acquire), statxbuf, &statx)
 }
 
 /// Get statx by file descriptor

@@ -1,3 +1,4 @@
+use core::sync::atomic::Ordering;
 use los_mm::user as mm_user;
 
 use los_vfs::dispatch::*;
@@ -29,7 +30,7 @@ pub fn sys_readv(fd: usize, iov_ptr: usize, count: usize) -> SyscallResult {
     }
 
     let task = los_sched::current_task();
-    let ttbr0 = task.ttbr0;
+    let ttbr0 = task.ttbr0.load(Ordering::Acquire);
 
     // Validate iovec array
     let iov_size = count * core::mem::size_of::<UserIoVec>();
@@ -93,7 +94,7 @@ pub fn sys_read(fd: usize, buf: usize, len: usize) -> SyscallResult {
     };
     drop(fd_table);
 
-    let ttbr0 = task.ttbr0;
+    let ttbr0 = task.ttbr0.load(Ordering::Acquire);
 
     match entry.fd_type {
         FdType::Stdin => {
