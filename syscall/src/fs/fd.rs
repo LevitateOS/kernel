@@ -134,6 +134,8 @@ pub fn sys_dup3(oldfd: usize, newfd: usize, _flags: u32) -> SyscallResult {
     let task = current_task();
     let mut fd_table = task.fd_table.lock();
 
+    log::trace!("[DUP] PID={} dup3({} -> {})", task.id.0, oldfd, newfd);
+
     match fd_table.dup_to(oldfd, newfd) {
         Some(fd) => Ok(fd as i64),
         None => Err(EBADF),
@@ -196,7 +198,8 @@ pub fn sys_pipe2(pipefd_ptr: usize, _flags: u32) -> SyscallResult {
     }
 
     log::trace!(
-        "[SYSCALL] pipe2: created pipe fds [{}, {}]",
+        "[PIPE2] PID={} created pipe fds [{}, {}]",
+        task.id.0,
         read_fd,
         write_fd
     );

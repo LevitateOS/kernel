@@ -225,10 +225,17 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
             frame.arg3() as usize,
         ),
         // TEAM_188: Wait for child process
+        // TEAM_460: Pass options (arg2) for WNOHANG support
         Some(SyscallNumber::Waitpid) => {
-            process::sys_waitpid(frame.arg0() as i32, frame.arg1() as usize)
+            process::sys_waitpid(frame.arg0() as i32, frame.arg1() as usize, frame.arg2() as u32)
         }
         Some(SyscallNumber::Getcwd) => fs::sys_getcwd(frame.arg0() as usize, frame.arg1() as usize),
+        // TEAM_460: mkdir(pathname, mode) -> mkdirat(AT_FDCWD, pathname, mode)
+        Some(SyscallNumber::Mkdir) => fs::sys_mkdirat(
+            -100, // AT_FDCWD
+            frame.arg0() as usize,
+            frame.arg1() as u32,
+        ),
         // TEAM_345: Linux ABI - mkdirat(dirfd, pathname, mode)
         Some(SyscallNumber::Mkdirat) => fs::sys_mkdirat(
             frame.arg0() as i32,
@@ -394,16 +401,13 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
             frame,
         ),
         Some(SyscallNumber::SetTidAddress) => process::sys_set_tid_address(frame.arg0() as usize),
-        // TEAM_453: vfork - BusyBox init uses this to spawn ash shell
-        // True vfork shares address space (CLONE_VM), but that requires blocking
-        // the parent until child execs. For now, use fork semantics (full copy)
-        // which is safer and works correctly even if less efficient.
+        // TEAM_460: fork and vfork both use sys_fork (fork semantics)
+        // True vfork should share address space, but we use fork semantics
+        // which is safer and correct, just less efficient.
         #[cfg(target_arch = "x86_64")]
-        Some(SyscallNumber::Vfork) => {
-            const SIGCHLD: u32 = 17;
-            // Fork semantics: no CLONE_VM, just SIGCHLD for child termination signal
-            process::sys_clone(SIGCHLD, 0, 0, 0, 0, frame)
-        }
+        Some(SyscallNumber::Fork) => process::sys_fork(frame),
+        #[cfg(target_arch = "x86_64")]
+        Some(SyscallNumber::Vfork) => process::sys_fork(frame),
         // TEAM_233: Pipe and dup syscalls
         Some(SyscallNumber::Dup) => fs::sys_dup(frame.arg0() as usize),
         Some(SyscallNumber::Dup3) => fs::sys_dup3(
@@ -556,8 +560,7 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
         Some(SyscallNumber::Getpgrp) => process::sys_getpgrp(),
         Some(SyscallNumber::Setsid) => process::sys_setsid(),
         // TEAM_438: Socket syscalls for brush - stub returns pipe pair
-        // TEAM_446: x86_64 only - aarch64 doesn't have socketpair syscall number
-        #[cfg(target_arch = "x86_64")]
+        // TEAM_459: Now supported on both x86_64 and aarch64
         Some(SyscallNumber::Socketpair) => sync::sys_socketpair(
             frame.arg0() as i32,
             frame.arg1() as i32,
@@ -565,7 +568,7 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
             frame.arg3() as usize,
         ),
         // TEAM_456: Socket stubs for BusyBox (no network stack yet)
-        #[cfg(target_arch = "x86_64")]
+        // TEAM_459: Now supported on both x86_64 and aarch64
         Some(SyscallNumber::Socket) => sync::sys_socket(
             frame.arg0() as i32,
             frame.arg1() as i32,

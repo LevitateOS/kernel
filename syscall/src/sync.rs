@@ -191,45 +191,62 @@ pub fn sys_ppoll(
         return Err(EFAULT);
     }
 
-    let fd_table = task.fd_table.lock();
-    let mut ready_count: i64 = 0;
+    // TEAM_460: Poll with blocking - yield to scheduler when nothing ready
+    // This is a simple implementation that polls in a loop with yields.
+    // A proper implementation would use wait queues.
+    const MAX_POLL_LOOPS: usize = 1000; // Prevent infinite loop
 
-    for i in 0..nfds {
-        let pfd_addr = fds_ptr + i * pollfd_size;
+    for _attempt in 0..MAX_POLL_LOOPS {
+        let fd_table = task.fd_table.lock();
+        let mut ready_count: i64 = 0;
 
-        // Read pollfd from user space
-        let pfd = match read_pollfd(ttbr0, pfd_addr) {
-            Some(p) => p,
-            None => return Err(EFAULT),
-        };
+        for i in 0..nfds {
+            let pfd_addr = fds_ptr + i * pollfd_size;
 
-        // Determine revents based on fd type
-        let revents = if pfd.fd < 0 {
-            // Negative fd: ignore, set revents = 0
-            0i16
-        } else {
-            match fd_table.get(pfd.fd as usize) {
-                None => {
-                    // Invalid fd
-                    POLLNVAL
+            // Read pollfd from user space
+            let pfd = match read_pollfd(ttbr0, pfd_addr) {
+                Some(p) => p,
+                None => return Err(EFAULT),
+            };
+
+            // Determine revents based on fd type
+            let revents = if pfd.fd < 0 {
+                // Negative fd: ignore, set revents = 0
+                0i16
+            } else {
+                match fd_table.get(pfd.fd as usize) {
+                    None => {
+                        // Invalid fd
+                        POLLNVAL
+                    }
+                    Some(entry) => poll_fd_type(&entry.fd_type, pfd.events),
                 }
-                Some(entry) => poll_fd_type(&entry.fd_type, pfd.events),
+            };
+
+            // Write revents back to user space
+            if !write_pollfd_revents(ttbr0, pfd_addr, revents) {
+                return Err(EFAULT);
             }
-        };
 
-        // Write revents back to user space
-        if !write_pollfd_revents(ttbr0, pfd_addr, revents) {
-            return Err(EFAULT);
+            if revents != 0 {
+                ready_count += 1;
+            }
         }
 
-        if revents != 0 {
-            ready_count += 1;
+        // If something is ready, return
+        if ready_count > 0 {
+            log::trace!("[SYSCALL] ppoll(nfds={}) -> {} ready", nfds, ready_count);
+            return Ok(ready_count);
         }
+
+        // Nothing ready - drop fd_table lock and yield to let other tasks run
+        drop(fd_table);
+        los_sched::yield_now();
     }
 
-    log::trace!("[SYSCALL] ppoll(nfds={}) -> {} ready", nfds, ready_count);
-
-    Ok(ready_count)
+    // Timed out (hit MAX_POLL_LOOPS)
+    log::trace!("[SYSCALL] ppoll(nfds={}) -> 0 (timeout)", nfds);
+    Ok(0)
 }
 
 /// TEAM_360: Read a pollfd struct from user space

@@ -53,16 +53,16 @@ pub enum ForkError {
 pub fn create_fork(tf: &SyscallFrame) -> Result<Arc<TaskControlBlock>, ForkError> {
     let parent = current_task();
 
-    log::info!("[FORK] Creating fork of PID={}", parent.id.0);
+    log::trace!("[FORK] Creating fork of PID={}", parent.id.0);
 
     // TEAM_454: Debug - log parent frame values to diagnose fork issues
     #[cfg(target_arch = "x86_64")]
-    log::info!(
+    log::trace!(
         "[FORK] Parent frame: rcx=0x{:x}, rsp=0x{:x}, rax=0x{:x}",
         tf.rcx, tf.rsp, tf.rax
     );
     #[cfg(target_arch = "aarch64")]
-    log::info!(
+    log::trace!(
         "[FORK] Parent frame: pc=0x{:x}, sp=0x{:x}",
         tf.pc, tf.sp
     );
@@ -78,7 +78,7 @@ pub fn create_fork(tf: &SyscallFrame) -> Result<Arc<TaskControlBlock>, ForkError
     )
     .ok_or(ForkError::AddressSpaceCopyFailed)?;
 
-    log::info!("[FORK] Copied address space, child_ttbr0=0x{:x}", child_ttbr0);
+    log::trace!("[FORK] Copied address space, child_ttbr0=0x{:x}", child_ttbr0);
 
     // 3. Allocate kernel stack for the child (16KB, same as threads)
     let kernel_stack_size = 16384;
@@ -105,14 +105,14 @@ pub fn create_fork(tf: &SyscallFrame) -> Result<Arc<TaskControlBlock>, ForkError
 
     // TEAM_454: Debug - verify child frame was written correctly
     #[cfg(target_arch = "x86_64")]
-    log::info!(
+    log::trace!(
         "[FORK] Child frame at 0x{:x}: rcx=0x{:x}, rsp=0x{:x}",
         child_frame_addr,
         child_frame.rcx,
         child_frame.rsp
     );
     #[cfg(target_arch = "aarch64")]
-    log::info!(
+    log::trace!(
         "[FORK] Child frame at 0x{:x}: pc=0x{:x}, sp=0x{:x}",
         child_frame_addr,
         child_frame.pc,
@@ -123,7 +123,7 @@ pub fn create_fork(tf: &SyscallFrame) -> Result<Arc<TaskControlBlock>, ForkError
     unsafe {
         let ptr = child_frame_addr as *const SyscallFrame;
         let readback = &*ptr;
-        log::info!(
+        log::trace!(
             "[FORK] Frame readback: rcx=0x{:x}, rsp=0x{:x}, rax=0x{:x}",
             readback.rcx,
             readback.rsp,
@@ -134,7 +134,7 @@ pub fn create_fork(tf: &SyscallFrame) -> Result<Arc<TaskControlBlock>, ForkError
     unsafe {
         let ptr = child_frame_addr as *const SyscallFrame;
         let readback = &*ptr;
-        log::info!(
+        log::trace!(
             "[FORK] Frame readback: pc=0x{:x}, sp=0x{:x}",
             readback.pc,
             readback.sp
@@ -145,7 +145,7 @@ pub fn create_fork(tf: &SyscallFrame) -> Result<Arc<TaskControlBlock>, ForkError
     let pid = Pid::next();
     let tid = pid.0 as usize;
 
-    log::info!("[FORK] Child PID={}", tid);
+    log::trace!("[FORK] Child PID={}", tid);
 
     // 6. Set up context for first switch
     // We want exception_return to restore from the SyscallFrame we just set up
@@ -153,14 +153,14 @@ pub fn create_fork(tf: &SyscallFrame) -> Result<Arc<TaskControlBlock>, ForkError
 
     // TEAM_454: Debug - verify Context.sp is set correctly
     #[cfg(target_arch = "x86_64")]
-    log::info!(
+    log::trace!(
         "[FORK] Context setup: rsp=0x{:x}, rip=0x{:x}, rbx=0x{:x}",
         context.rsp,
         context.rip,
         context.rbx
     );
     #[cfg(target_arch = "aarch64")]
-    log::info!(
+    log::trace!(
         "[FORK] Context setup: sp=0x{:x}, lr=0x{:x}",
         context.sp,
         context.lr

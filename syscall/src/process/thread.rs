@@ -214,6 +214,23 @@ fn clone_fork(
     Ok(child_pid as i64)
 }
 
+/// TEAM_460: sys_fork - Create a new process by forking.
+///
+/// This is the common implementation for both fork() and vfork() syscalls.
+/// True vfork() should share address space until exec, but we use fork
+/// semantics (full copy) which is safer and correct, just less efficient.
+///
+/// # Arguments
+/// * `tf` - Parent's syscall frame for register cloning
+///
+/// # Returns
+/// Child PID to parent, 0 to child, or negative errno.
+pub fn sys_fork(tf: &crate::SyscallFrame) -> SyscallResult {
+    const SIGCHLD: u32 = 17;
+    // Fork semantics: no CLONE_VM, just SIGCHLD for child termination signal
+    clone_fork(SIGCHLD, 0, 0, tf)
+}
+
 /// TEAM_228: sys_set_tid_address - Set pointer to thread ID.
 ///
 /// # Arguments

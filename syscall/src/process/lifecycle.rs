@@ -13,7 +13,6 @@ use los_mm::user as mm_user;
 // TEAM_422: Removed ELOOP, ENOENT - not directly used after hook refactor
 use linux_raw_sys::errno::{ECHILD, EFAULT, EINVAL, ENOSYS};
 use los_hal::IrqSafeLock;
-use los_sched::fd_table::FdTable;
 
 // ============================================================================
 // TEAM_414: Process Syscall Helpers
@@ -426,7 +425,7 @@ fn execve_internal(
         }
     }
 
-    log::info!(
+    log::trace!(
         "[EXECVE] Success: path='{}' entry=0x{:x} sp=0x{:x}",
         path,
         exec_image.entry_point,
@@ -624,8 +623,13 @@ pub fn sys_spawn_args(
 /// TEAM_414: Refactored to use write_exit_status helper.
 /// TEAM_453: Added support for pid=-1 (wait for any child) for BusyBox init.
 /// TEAM_454: Fixed to properly block when waiting for any child.
-pub fn sys_waitpid(pid: i32, status_ptr: usize) -> SyscallResult {
+/// TEAM_460: Added options parameter to support WNOHANG for command substitution.
+pub fn sys_waitpid(pid: i32, status_ptr: usize, options: u32) -> SyscallResult {
     let current = los_sched::current_task();
+
+    // TEAM_460: WNOHANG flag - return immediately if no child has exited
+    const WNOHANG: u32 = 1;
+    let nohang = (options & WNOHANG) != 0;
 
     // TEAM_453: Handle pid=-1 (wait for any child)
     // TEAM_454: Fixed to properly block instead of returning ECHILD
@@ -635,6 +639,11 @@ pub fn sys_waitpid(pid: i32, status_ptr: usize) -> SyscallResult {
             let _ = write_exit_status(current.ttbr0.load(Ordering::Acquire), status_ptr, exit_code);
             los_sched::process_table::reap_zombie(child_pid);
             return Ok(child_pid as i64);
+        }
+
+        // TEAM_460: If WNOHANG and no zombie, return 0 (no child exited yet)
+        if nohang {
+            return Ok(0);
         }
 
         // No exited children yet - block and wait
@@ -667,6 +676,11 @@ pub fn sys_waitpid(pid: i32, status_ptr: usize) -> SyscallResult {
         let _ = write_exit_status(current.ttbr0.load(Ordering::Acquire), status_ptr, exit_code);
         los_sched::process_table::reap_zombie(pid);
         return Ok(pid as i64);
+    }
+
+    // TEAM_460: If WNOHANG and child not exited, return 0
+    if nohang {
+        return Ok(0);
     }
 
     // Child still running - block

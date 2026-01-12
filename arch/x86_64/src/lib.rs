@@ -87,6 +87,10 @@ pub enum SyscallNumber {
     ClockGettime = 228,
     // TEAM_453: vfork for BusyBox init to spawn ash
     Vfork = 58,
+    // TEAM_460: fork syscall for ash shell
+    Fork = 57,
+    // TEAM_460: mkdir for BusyBox coreutils
+    Mkdir = 83,
     Openat = 257,
     Mkdirat = 258,
     Unlinkat = 263,
@@ -222,7 +226,9 @@ impl SyscallNumber {
             202 => Some(Self::Futex),
             218 => Some(Self::SetTidAddress),
             228 => Some(Self::ClockGettime),
+            57 => Some(Self::Fork),  // TEAM_460
             58 => Some(Self::Vfork), // TEAM_453
+            83 => Some(Self::Mkdir), // TEAM_460
             257 => Some(Self::Openat),
             258 => Some(Self::Mkdirat),
             263 => Some(Self::Unlinkat),

@@ -162,7 +162,7 @@ pub unsafe fn destroy_user_page_table(ttbr0_phys: usize) -> Result<(), MmuError>
 /// - `parent_ttbr0` must be a valid user L0/PML4 page table
 /// - `vmas` must accurately describe the parent's mapped regions
 pub fn copy_user_address_space(parent_ttbr0: usize, vmas: &VmaList) -> Option<usize> {
-    log::info!("[FORK] Copying user address space...");
+    log::trace!("[FORK] Copying user address space...");
 
     // 1. Create a new page table for the child
     let child_ttbr0 = create_user_page_table()?;
@@ -179,7 +179,7 @@ pub fn copy_user_address_space(parent_ttbr0: usize, vmas: &VmaList) -> Option<us
     // 3. For each VMA, copy all mapped pages
     for vma in vmas.iter() {
         vma_count += 1;
-        log::info!(
+        log::trace!(
             "[FORK] VMA {}: 0x{:x}-0x{:x} flags={:?}",
             vma_count,
             vma.start,
@@ -241,7 +241,7 @@ pub fn copy_user_address_space(parent_ttbr0: usize, vmas: &VmaList) -> Option<us
         }
     }
 
-    log::info!(
+    log::trace!(
         "[FORK] Address space copy complete, child_ttbr0=0x{:x}, {} pages copied",
         child_ttbr0,
         total_pages

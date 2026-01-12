@@ -6,6 +6,9 @@
 //! TEAM_422: This module was extracted from the monolithic kernel.
 //! Some types (EpollInstance, EventFdState, PtyPair) are defined externally
 //! to avoid circular dependencies.
+//!
+//! TEAM_459: Refactored with bitmap-based allocation for O(1) free slot lookup.
+//! Increased MAX_FDS from 64 to 1024.
 
 extern crate alloc;
 
@@ -14,8 +17,12 @@ use alloc::vec::Vec;
 use core::any::Any;
 use los_hal::IrqSafeLock;
 
-/// TEAM_168: Maximum number of open file descriptors per process.
-pub const MAX_FDS: usize = 64;
+/// TEAM_459: Maximum number of open file descriptors per process.
+/// Increased from 64 to 1024 (Linux default soft limit).
+pub const MAX_FDS: usize = 1024;
+
+/// TEAM_459: Number of u64 words needed for the bitmap (1024 / 64 = 16).
+const BITMAP_WORDS: usize = MAX_FDS / 64;
 
 // TEAM_422: Import types from los_vfs
 use los_vfs::{FileRef, PipeRef};
@@ -117,45 +124,108 @@ impl FdEntry {
 
 /// TEAM_168: Per-process file descriptor table.
 /// TEAM_195: Removed Debug derive since FdEntry no longer implements Debug.
+/// TEAM_459: Added bitmap for O(1) allocation, next_free hint.
 #[derive(Clone)]
 pub struct FdTable {
     /// Sparse array of file descriptors (None = unused slot)
     entries: Vec<Option<FdEntry>>,
+    /// TEAM_459: Bitmap tracking used FDs (bit set = FD in use)
+    bitmap: [u64; BITMAP_WORDS],
+    /// TEAM_459: Hint for next free FD (may be stale, but speeds up common case)
+    next_free: usize,
 }
 
 impl FdTable {
     /// TEAM_168: Create a new fd table with stdin/stdout/stderr pre-populated.
+    /// TEAM_459: Now initializes bitmap with bits 0,1,2 set.
     pub fn new() -> Self {
-        let mut entries = Vec::with_capacity(MAX_FDS);
+        let mut entries = Vec::with_capacity(16); // Start small, grow as needed
 
         // Pre-populate fd 0 (stdin), 1 (stdout), 2 (stderr)
         entries.push(Some(FdEntry::new(FdType::Stdin))); // fd 0
         entries.push(Some(FdEntry::new(FdType::Stdout))); // fd 1
         entries.push(Some(FdEntry::new(FdType::Stderr))); // fd 2
 
-        Self { entries }
+        // TEAM_459: Initialize bitmap with fd 0,1,2 marked as used
+        let mut bitmap = [0u64; BITMAP_WORDS];
+        bitmap[0] = 0b111; // Bits 0, 1, 2 set
+
+        Self {
+            entries,
+            bitmap,
+            next_free: 3, // First free FD after stdio
+        }
+    }
+
+    /// TEAM_459: Set a bit in the bitmap (mark FD as used).
+    #[inline]
+    fn bitmap_set(&mut self, fd: usize) {
+        let word = fd / 64;
+        let bit = fd % 64;
+        self.bitmap[word] |= 1u64 << bit;
+    }
+
+    /// TEAM_459: Clear a bit in the bitmap (mark FD as free).
+    #[inline]
+    fn bitmap_clear(&mut self, fd: usize) {
+        let word = fd / 64;
+        let bit = fd % 64;
+        self.bitmap[word] &= !(1u64 << bit);
+    }
+
+    /// TEAM_459: Check if a bit is set in the bitmap.
+    #[inline]
+    fn bitmap_is_set(&self, fd: usize) -> bool {
+        let word = fd / 64;
+        let bit = fd % 64;
+        (self.bitmap[word] & (1u64 << bit)) != 0
+    }
+
+    /// TEAM_459: Find the lowest free FD using bitmap.
+    /// Returns None if all FDs are in use.
+    fn find_lowest_free(&self) -> Option<usize> {
+        for (word_idx, &word) in self.bitmap.iter().enumerate() {
+            if word != u64::MAX {
+                // This word has at least one free bit
+                let bit_idx = (!word).trailing_zeros() as usize;
+                let fd = word_idx * 64 + bit_idx;
+                if fd < MAX_FDS {
+                    return Some(fd);
+                }
+            }
+        }
+        None
     }
 
     /// TEAM_168: Allocate a new file descriptor (lowest available per Q2 decision).
+    /// TEAM_459: Rewritten to use bitmap for O(1) amortized allocation.
     ///
     /// Returns the fd number on success, or None if table is full.
     pub fn alloc(&mut self, fd_type: FdType) -> Option<usize> {
-        // Q2 decision: Always use lowest available (POSIX behavior)
-        for (i, slot) in self.entries.iter_mut().enumerate() {
-            if slot.is_none() {
-                *slot = Some(FdEntry::new(fd_type));
-                return Some(i);
-            }
+        // TEAM_459: Fast path - check next_free hint first
+        let fd = if self.next_free < MAX_FDS && !self.bitmap_is_set(self.next_free) {
+            self.next_free
+        } else {
+            // Slow path - find lowest free via bitmap scan
+            self.find_lowest_free()?
+        };
+
+        // Ensure entries vector is large enough
+        while self.entries.len() <= fd {
+            self.entries.push(None);
         }
 
-        // No free slot in existing entries, try to extend
-        if self.entries.len() < MAX_FDS {
-            let fd = self.entries.len();
-            self.entries.push(Some(FdEntry::new(fd_type)));
-            return Some(fd);
+        // Mark FD as used in bitmap and store entry
+        self.bitmap_set(fd);
+        self.entries[fd] = Some(FdEntry::new(fd_type));
+
+        // Update next_free hint (scan forward from allocated FD)
+        self.next_free = fd + 1;
+        while self.next_free < MAX_FDS && self.bitmap_is_set(self.next_free) {
+            self.next_free += 1;
         }
 
-        None // Table full
+        Some(fd)
     }
 
     /// TEAM_168: Get a file descriptor entry by number.
@@ -171,12 +241,21 @@ impl FdTable {
 
     /// TEAM_168: Close a file descriptor.
     /// TEAM_240: Now properly closes pipe read/write ends.
+    /// TEAM_459: Now clears bitmap and updates next_free hint.
     ///
     /// Returns true if fd was valid and closed, false otherwise.
     pub fn close(&mut self, fd: usize) -> bool {
+        if fd >= MAX_FDS {
+            return false;
+        }
         if let Some(slot) = self.entries.get_mut(fd) {
             if slot.take().is_some() {
                 // Entry dropped -> FdType dropped -> refcount decremented
+                // TEAM_459: Clear bitmap and update hint
+                self.bitmap_clear(fd);
+                if fd < self.next_free {
+                    self.next_free = fd;
+                }
                 return true;
             }
         }
@@ -184,10 +263,14 @@ impl FdTable {
     }
 
     /// TEAM_333: Close all file descriptors (for process exit).
+    /// TEAM_459: Now resets bitmap and next_free hint.
     pub fn close_all(&mut self) {
         for slot in self.entries.iter_mut() {
             slot.take(); // Drops entry -> decrements refcounts
         }
+        // TEAM_459: Reset bitmap
+        self.bitmap = [0u64; BITMAP_WORDS];
+        self.next_free = 0;
     }
 
     /// TEAM_168: Check if a file descriptor is valid.
@@ -207,6 +290,7 @@ impl FdTable {
     }
 
     /// TEAM_233: Duplicate a file descriptor to a specific slot.
+    /// TEAM_459: Now updates bitmap when closing/opening FDs.
     ///
     /// If newfd is already open, it is closed first.
     /// Returns newfd on success, or None if oldfd is invalid.
@@ -227,9 +311,13 @@ impl FdTable {
         }
 
         // TEAM_240: Close newfd if open (will trigger Drop and cleanup)
-        let _ = self.entries[newfd].take();
+        // TEAM_459: Clear bitmap if newfd was in use
+        if self.entries[newfd].take().is_some() {
+            self.bitmap_clear(newfd);
+        }
 
         // Set newfd to point to same fd_type
+        self.bitmap_set(newfd);
         self.entries[newfd] = Some(FdEntry::new(fd_type));
         Some(newfd)
     }
@@ -255,13 +343,8 @@ pub fn new_shared_fd_table() -> SharedFdTable {
 
 /// TEAM_453: Create a shared fd table with stdin/stdout/stderr pre-opened.
 /// This is required for BusyBox init which expects fd 0,1,2 to be valid.
+/// TEAM_459: Simplified - FdTable::new() already sets up stdio at fd 0,1,2.
 pub fn new_shared_fd_table_with_stdio() -> SharedFdTable {
-    let mut table = FdTable::new();
-    // Allocate fd 0 = stdin
-    table.alloc(FdType::Stdin);
-    // Allocate fd 1 = stdout
-    table.alloc(FdType::Stdout);
-    // Allocate fd 2 = stderr
-    table.alloc(FdType::Stderr);
-    Arc::new(IrqSafeLock::new(table))
+    // FdTable::new() already allocates stdin/stdout/stderr at fd 0,1,2
+    Arc::new(IrqSafeLock::new(FdTable::new()))
 }

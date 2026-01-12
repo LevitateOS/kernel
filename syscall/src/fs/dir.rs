@@ -152,6 +152,14 @@ pub fn sys_mkdirat(dirfd: i32, pathname: usize, mode: u32) -> SyscallResult {
         return Err(EBADF);
     }
 
+    // TEAM_460: Handle root directory specially for mkdir -p support
+    // When path is "/" (or "//" etc.), root already exists, return EEXIST
+    // This allows mkdir -p to continue without error
+    let normalized_path = path_str.trim_end_matches('/');
+    if normalized_path.is_empty() {
+        return Err(EEXIST);
+    }
+
     // TEAM_430: Apply umask to mode (mode & ~umask)
     let umask = task.umask.load(Ordering::Acquire);
     let effective_mode = mode & !umask;

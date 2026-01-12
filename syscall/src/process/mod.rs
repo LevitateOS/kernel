@@ -30,7 +30,7 @@ pub use lifecycle::{
 };
 pub use resources::{sys_getrusage, sys_prlimit64};
 pub use sched::{sys_sched_getaffinity, sys_sched_setaffinity};
-pub use thread::{sys_clone, sys_set_tid_address};
+pub use thread::{sys_clone, sys_fork, sys_set_tid_address};
 
 // Re-export types that may be used externally
 pub use identity::Utsname;

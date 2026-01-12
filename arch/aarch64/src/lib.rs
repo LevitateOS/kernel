@@ -132,6 +132,8 @@ pub enum SyscallNumber {
     Getrusage = 165,     // TEAM_409: Resource usage (standard aarch64)
     // TEAM_459: Syscalls for BusyBox
     Sendfile = 71,       // Copy data between file descriptors
+    Socket = 198,        // Socket creation (stub - no network stack yet)
+    Socketpair = 199,    // Create pair of connected sockets
 
     // === Custom LevitateOS syscalls (temporary, until clone/execve work) ===
     /// TEAM: Spawn process (custom, will be replaced by clone+execve)
@@ -264,6 +266,8 @@ impl SyscallNumber {
             165 => Some(Self::Getrusage),     // TEAM_409
             // TEAM_459: Syscalls for BusyBox
             71 => Some(Self::Sendfile),
+            198 => Some(Self::Socket),
+            199 => Some(Self::Socketpair),
             // Custom LevitateOS
             1000 => Some(Self::Spawn),
             1001 => Some(Self::SpawnArgs),

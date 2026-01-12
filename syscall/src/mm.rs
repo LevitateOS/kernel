@@ -176,7 +176,7 @@ pub fn sys_mmap(
     offset: usize,
 ) -> SyscallResult {
     // TEAM_456: Debug logging for mmap calls
-    log::info!(
+    log::trace!(
         "[MMAP] Request: addr=0x{:x} len=0x{:x} prot=0x{:x} flags=0x{:x}",
         addr, len, prot, flags
     );
@@ -213,7 +213,7 @@ pub fn sys_mmap(
     // Start searching from a reasonable base (0x1000_0000_0000) if no hint
     let base_addr = if addr != 0 && flags & MAP_FIXED != 0 {
         // MAP_FIXED: use exact address (must be page-aligned)
-        log::info!("[MMAP] MAP_FIXED at addr=0x{:x}", addr);
+        log::trace!("[MMAP] MAP_FIXED at addr=0x{:x}", addr);
         if addr & (PAGE_SIZE - 1) != 0 {
             return Err(EINVAL);
         }
@@ -222,7 +222,7 @@ pub fn sys_mmap(
         // Find a free region - start at a safe mmap area
         // TEAM_228: Use a simple linear search for free space
         let found = find_free_mmap_region(ttbr0, alloc_len).unwrap_or(0);
-        log::info!("[MMAP] Found free region at 0x{:x}", found);
+        log::trace!("[MMAP] Found free region at 0x{:x}", found);
         found
     };
 

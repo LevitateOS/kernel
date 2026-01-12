@@ -237,7 +237,7 @@ pub fn prepare_exec_image(
     let tls_end = tls_start + TLS_PAGES * PAGE_SIZE;
     let _ = vmas.insert(Vma::new(tls_start, tls_end, VmaFlags::READ | VmaFlags::WRITE));
 
-    log::info!(
+    log::trace!(
         "[EXEC] Prepared image: entry=0x{:x} sp=0x{:x} brk=0x{:x} tls=0x{:x}",
         entry_point,
         stack_pointer,
