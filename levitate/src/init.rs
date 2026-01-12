@@ -606,6 +606,9 @@ fn init_filesystem() {
     crate::fs::tmpfs::init();
     mount_tmpfs_at_dentry();
 
+    // TEAM_465: Mount separate tmpfs at /root for writable home directory
+    mount_tmpfs_at_root();
+
     // TEAM_431: Initialize devtmpfs and mount at /dev dentry
     los_fs_devtmpfs::init();
     mount_devtmpfs_at_dentry();
@@ -646,6 +649,43 @@ fn mount_tmpfs_at_dentry() {
     // Mount tmpfs at this dentry
     tmp_dentry.mount(Arc::clone(tmpfs) as Arc<dyn Superblock>);
     crate::verbose!("[BOOT] Mounted tmpfs at /tmp");
+}
+
+/// TEAM_465: Mount a separate tmpfs at /root for writable home directory
+///
+/// The initramfs is read-only, so we need a writable tmpfs overlay at /root
+/// to allow the shell test suite and other programs to create files there.
+fn mount_tmpfs_at_root() {
+    use crate::fs::{Dentry, Superblock};
+    use alloc::string::String;
+
+    // Create a new tmpfs superblock for /root
+    // This is separate from the /tmp tmpfs to keep them isolated
+    let root_tmpfs = crate::fs::tmpfs::create_superblock();
+
+    // Get root dentry
+    let root = match crate::fs::dcache().root() {
+        Some(r) => r,
+        None => {
+            log::warn!("[BOOT] WARNING: No root dentry for /root tmpfs mount");
+            return;
+        }
+    };
+
+    // Create /root dentry if it doesn't exist, or use existing one
+    let root_home_dentry = root.lookup_child("root").unwrap_or_else(|| {
+        let d = Arc::new(Dentry::new(
+            String::from("root"),
+            Some(Arc::downgrade(&root)),
+            None, // No inode yet - mount will provide it
+        ));
+        root.add_child(Arc::clone(&d));
+        d
+    });
+
+    // Mount the new tmpfs at this dentry
+    root_home_dentry.mount(root_tmpfs as Arc<dyn Superblock>);
+    crate::verbose!("[BOOT] Mounted tmpfs at /root");
 }
 
 /// TEAM_431: Mount devtmpfs at /dev in the dcache

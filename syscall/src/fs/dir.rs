@@ -7,7 +7,7 @@ use los_vfs::error::VfsError;
 // TEAM_421: Import SyscallResult
 use crate::{SyscallResult, write_to_user_buf};
 use linux_raw_sys::errno::{
-    EBADF, EEXIST, EFAULT, EINVAL, ENOENT, ENOTDIR, ENOTEMPTY, ERANGE, EXDEV,
+    EACCES, EBADF, EEXIST, EFAULT, EINVAL, EIO, ENOENT, ENOTDIR, ENOTEMPTY, EPERM, ERANGE, EROFS, EXDEV,
 };
 use linux_raw_sys::general::{AT_FDCWD, AT_REMOVEDIR};
 use los_sched::fd_table::FdType;
@@ -163,11 +163,17 @@ pub fn sys_mkdirat(dirfd: i32, pathname: usize, mode: u32) -> SyscallResult {
     // TEAM_430: Apply umask to mode (mode & ~umask)
     let umask = task.umask.load(Ordering::Acquire);
     let effective_mode = mode & !umask;
+    // TEAM_465: Improve error mapping for mkdir syscall
     match vfs_mkdir(path_str, effective_mode) {
         Ok(()) => Ok(0),
         Err(VfsError::AlreadyExists) => Err(EEXIST),
         Err(VfsError::NotFound) => Err(ENOENT),
         Err(VfsError::NotADirectory) => Err(ENOTDIR),
+        Err(VfsError::ReadOnlyFs) => Err(EROFS),
+        Err(VfsError::NotSupported) => Err(EROFS), // Read-only fs doesn't support mkdir
+        Err(VfsError::IoError) => Err(EIO),
+        Err(VfsError::PermissionDenied) => Err(EPERM),
+        Err(VfsError::AccessDenied) => Err(EACCES),
         Err(_) => Err(EINVAL),
     }
 }

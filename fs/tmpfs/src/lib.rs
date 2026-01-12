@@ -62,6 +62,23 @@ pub fn init() {
     *tmpfs_lock = Some(tmpfs);
 }
 
+/// TEAM_465: Create a new independent tmpfs superblock.
+///
+/// This is used for mounting tmpfs at multiple locations (e.g., /tmp, /root).
+/// Each call creates a new isolated tmpfs instance.
+pub fn create_superblock() -> Arc<Tmpfs> {
+    let tmpfs = Arc::new(Tmpfs::new());
+
+    // Initialize VFS root
+    let root_inode = tmpfs.make_inode(
+        Arc::clone(&tmpfs.root),
+        Arc::downgrade(&(Arc::clone(&tmpfs) as Arc<dyn Superblock>)),
+    );
+    *tmpfs.vfs_root.lock() = Some(root_inode);
+
+    tmpfs
+}
+
 /// TEAM_194: Check if a path is under /tmp
 pub fn is_tmpfs_path(path: &str) -> bool {
     let normalized = path.trim_start_matches('/');
