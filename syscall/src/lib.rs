@@ -156,6 +156,15 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
             frame.arg3() as u32,
         ),
         Some(SyscallNumber::Close) => fs::sys_close(frame.arg0() as usize),
+        // TEAM_459: Legacy stat() - translates to fstatat(AT_FDCWD, ...)
+        // Note: aarch64 doesn't have legacy stat syscall, only fstatat
+        #[cfg(target_arch = "x86_64")]
+        Some(SyscallNumber::Stat) => fs::sys_fstatat(
+            -100, // AT_FDCWD
+            frame.arg0() as usize,
+            frame.arg1() as usize,
+            0,
+        ),
         Some(SyscallNumber::Fstat) => fs::sys_fstat(frame.arg0() as usize, frame.arg1() as usize),
         // TEAM_404: File positioning and descriptor syscalls
         Some(SyscallNumber::Lseek) => fs::sys_lseek(

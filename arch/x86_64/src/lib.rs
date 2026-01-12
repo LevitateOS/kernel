@@ -36,6 +36,7 @@ pub enum SyscallNumber {
     Write = 1,
     Open = 2,  // TEAM_444: Legacy open() - maps to openat(AT_FDCWD, ...)
     Close = 3,
+    Stat = 4,  // TEAM_459: stat() - maps to fstatat(AT_FDCWD, ...)
     Fstat = 5,
     Poll = 7,  // TEAM_406: I/O multiplexing
     Lseek = 8, // TEAM_404: File positioning
@@ -169,6 +170,7 @@ impl SyscallNumber {
             1 => Some(Self::Write),
             2 => Some(Self::Open),  // TEAM_444: Legacy open()
             3 => Some(Self::Close),
+            4 => Some(Self::Stat),  // TEAM_459: Legacy stat()
             5 => Some(Self::Fstat),
             7 => Some(Self::Poll),  // TEAM_406
             8 => Some(Self::Lseek), // TEAM_404
