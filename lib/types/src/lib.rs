@@ -60,7 +60,14 @@ pub const S_IXOTH: u32 = 0o0001;
 
 /// File status structure (Linux ABI compatible)
 ///
-/// Must be exactly 128 bytes on both architectures.
+/// TEAM_446 BREADCRUMB: CONFIRMED - x86_64 layout is WRONG!
+/// This struct uses aarch64/asm-generic layout (128 bytes).
+/// Linux x86_64 has DIFFERENT layout (144 bytes) with st_nlink BEFORE st_mode.
+/// See: https://github.com/torvalds/linux/blob/master/arch/x86/include/uapi/asm/stat.h
+///
+/// TODO: Create arch-specific Stat structs for correct Linux ABI compliance.
+///
+/// Current: 128 bytes (correct for aarch64, WRONG for x86_64)
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Stat {

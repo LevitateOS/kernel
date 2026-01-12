@@ -225,10 +225,11 @@ pub fn sys_isatty(fd: i32) -> SyscallResult {
 /// Returns 0 on success, errno on failure.
 pub fn sys_ioctl(fd: usize, request: u64, arg: usize) -> SyscallResult {
     // TEAM_422: Use ioctl constants from arch crate (u64 to match request type)
+    // TEAM_447: Added TIOCSWINSZ for setting terminal window size
     #[cfg(target_arch = "aarch64")]
-    use los_arch_aarch64::{TCGETS, TCSETS, TCSETSF, TCSETSW, TIOCGPTN, TIOCSPTLCK, TIOCGWINSZ};
+    use los_arch_aarch64::{TCGETS, TCSETS, TCSETSF, TCSETSW, TIOCGPTN, TIOCSPTLCK, TIOCGWINSZ, TIOCSWINSZ};
     #[cfg(target_arch = "x86_64")]
-    use los_arch_x86_64::{TCGETS, TCSETS, TCSETSF, TCSETSW, TIOCGPTN, TIOCSPTLCK, TIOCGWINSZ};
+    use los_arch_x86_64::{TCGETS, TCSETS, TCSETSF, TCSETSW, TIOCGPTN, TIOCSPTLCK, TIOCGWINSZ, TIOCSWINSZ};
     use los_fs_tty::CONSOLE_TTY;
 
     // TEAM_413: Use get_fd helper
@@ -274,6 +275,23 @@ pub fn sys_ioctl(fd: usize, request: u64, arg: usize) -> SyscallResult {
                         return Err(EFAULT);
                     }
                 }
+                Ok(0)
+            }
+            // TEAM_447: TIOCSWINSZ - set terminal window size
+            TIOCSWINSZ => {
+                // Read winsize from userspace (struct winsize is 8 bytes)
+                // We just accept the request but don't actually store it since
+                // we have a fixed terminal size. This makes programs happy.
+                let mut bytes = [0u8; 8];
+                for i in 0..8 {
+                    if let Some(b) = crate::read_from_user(task.ttbr0, arg + i) {
+                        bytes[i] = b;
+                    } else {
+                        return Err(EFAULT);
+                    }
+                }
+                // Could store winsize here if needed in future
+                log::trace!("[IOCTL] TIOCSWINSZ: accepted (no-op for now)");
                 Ok(0)
             }
             _ => Err(EINVAL),

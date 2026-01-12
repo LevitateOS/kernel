@@ -26,14 +26,28 @@ pub fn sys_setpgid(pid: i32, pgid: i32) -> SyscallResult {
     // pgid 0 means use target pid as pgid
     let new_pgid = if pgid == 0 { target_pid } else { pgid as usize };
 
-    // For simplicity, only allow setting own process group
-    if target_pid != current_pid {
-        // Would need to look up target process in process table
-        // For now, only support setting own pgid
-        return Err(ESRCH);
+    // TEAM_447: Support setting pgid for other processes (children)
+    if target_pid == current_pid {
+        // Setting own pgid
+        task.pgid.store(new_pgid, Ordering::Release);
+    } else {
+        // Setting pgid for another process - must be a child
+        let table = los_sched::process_table::PROCESS_TABLE.lock();
+        if let Some(entry) = table.get(&target_pid) {
+            // Verify target is a child of current process (parent_pid is in ProcessEntry)
+            if entry.parent_pid != current_pid {
+                return Err(EPERM);
+            }
+            if let Some(target_task) = &entry.task {
+                target_task.pgid.store(new_pgid, Ordering::Release);
+            } else {
+                return Err(ESRCH);
+            }
+        } else {
+            return Err(ESRCH);
+        }
     }
 
-    task.pgid.store(new_pgid, Ordering::Release);
     log::trace!("[SYSCALL] setpgid({}, {}) -> 0", pid, pgid);
     Ok(0)
 }

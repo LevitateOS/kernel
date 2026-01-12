@@ -78,11 +78,143 @@ mod aarch64_handlers {
     }
 
     /// Check and deliver signals before returning to userspace
-    /// TEAM_422: Stub implementation - real signal delivery to be implemented
+    /// TEAM_447: Implement proper signal delivery
     #[unsafe(no_mangle)]
-    pub extern "C" fn check_and_deliver_signals(_frame: &mut SyscallFrame) {
-        // TODO(TEAM_422): Implement proper signal delivery
-        // For now, this is a no-op placeholder
+    pub extern "C" fn check_and_deliver_signals(frame: &mut SyscallFrame) {
+        use core::sync::atomic::Ordering;
+        use los_sched::current_task;
+
+        let task = current_task();
+
+        // Get pending signals that are not blocked
+        let pending = task.pending_signals.load(Ordering::Acquire);
+        let blocked = task.blocked_signals.load(Ordering::Acquire);
+        let deliverable = pending & !blocked;
+
+        if deliverable == 0 {
+            return;
+        }
+
+        // Find the first deliverable signal (lowest bit set)
+        let sig = deliverable.trailing_zeros() as i32;
+        if sig >= 64 {
+            return;
+        }
+
+        // Clear the pending bit for this signal
+        task.pending_signals
+            .fetch_and(!(1u32 << sig), Ordering::Release);
+
+        // Get the signal handler
+        let handlers = task.signal_handlers.lock();
+        let action = handlers[sig as usize];
+        drop(handlers);
+
+        // SIG_DFL (0) = default action
+        // SIG_IGN (1) = ignore
+        // Other = userspace handler address
+        match action.handler {
+            0 => {
+                // SIG_DFL - Default action
+                // For most signals, default is to terminate
+                // SIGCHLD (17), SIGCONT (18), SIGURG (23) are ignored by default
+                if sig == 17 || sig == 18 || sig == 23 {
+                    return; // Ignore
+                }
+                // Terminate process for other signals
+                log::debug!(
+                    "[SIGNAL] PID={} terminated by signal {}",
+                    task.id.0,
+                    sig
+                );
+                los_sched::task_exit();
+            }
+            1 => {
+                // SIG_IGN - Ignore the signal
+                return;
+            }
+            handler_addr => {
+                // Custom handler - set up signal frame and redirect
+                deliver_signal_to_handler(frame, sig, handler_addr, &action, &task);
+            }
+        }
+    }
+
+    /// TEAM_447: Set up signal frame on user stack and redirect to handler
+    fn deliver_signal_to_handler(
+        frame: &mut SyscallFrame,
+        sig: i32,
+        handler: usize,
+        action: &los_sched::SignalAction,
+        task: &los_sched::TaskControlBlock,
+    ) {
+        let ttbr0 = task.ttbr0;
+
+        // Calculate signal frame size (SyscallFrame + padding for alignment)
+        let frame_size = core::mem::size_of::<SyscallFrame>();
+        let aligned_size = (frame_size + 15) & !15; // 16-byte align
+
+        // Push signal frame to user stack
+        let new_sp = frame.sp as usize - aligned_size;
+
+        // Write the current frame to user stack (for sigreturn to restore)
+        let frame_bytes =
+            unsafe { core::slice::from_raw_parts(frame as *const _ as *const u8, frame_size) };
+
+        for (i, &byte) in frame_bytes.iter().enumerate() {
+            if !los_syscall::write_to_user_buf(ttbr0, new_sp, i, byte) {
+                log::error!(
+                    "[SIGNAL] PID={} Failed to write signal frame to user stack",
+                    task.id.0
+                );
+                los_sched::task_exit();
+            }
+        }
+
+        // Update frame to redirect to signal handler
+        frame.sp = new_sp as u64;
+
+        #[cfg(target_arch = "aarch64")]
+        {
+            // aarch64: set PC to handler, x0 = signal number
+            frame.pc = handler as u64;
+            frame.regs[0] = sig as u64;
+            // Set LR (x30) to signal trampoline for sigreturn
+            let trampoline = task.signal_trampoline.load(core::sync::atomic::Ordering::Acquire);
+            if trampoline != 0 {
+                frame.regs[30] = trampoline as u64;
+            }
+        }
+
+        #[cfg(target_arch = "x86_64")]
+        {
+            // x86_64: set RIP to handler, RDI = signal number
+            frame.pc = handler as u64;
+            frame.rcx = handler as u64; // rcx is used as return address
+            frame.rdi = sig as u64; // First argument
+            // Push return address (signal trampoline) to stack for ret instruction
+            let trampoline = action.restorer;
+            if trampoline != 0 {
+                // Push trampoline address as return address
+                let ret_sp = new_sp - 8;
+                let tramp_bytes = (trampoline as u64).to_le_bytes();
+                for (i, &byte) in tramp_bytes.iter().enumerate() {
+                    if !los_syscall::write_to_user_buf(ttbr0, ret_sp, i, byte) {
+                        log::error!("[SIGNAL] PID={} Failed to push return address", task.id.0);
+                        los_sched::task_exit();
+                    }
+                }
+                frame.sp = ret_sp as u64;
+                frame.rsp = ret_sp as u64;
+            }
+        }
+
+        log::debug!(
+            "[SIGNAL] PID={} Delivering signal {} to handler {:#x}",
+            task.id.0,
+            sig,
+            handler
+        );
     }
 }
 
