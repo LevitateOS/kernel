@@ -56,6 +56,6 @@ pub use superblock::{StatFs, Superblock, SuperblockRef};
 
 // Re-export dispatch functions
 pub use dispatch::{
-    vfs_access, vfs_fstat, vfs_mkdir, vfs_open, vfs_read, vfs_readdir, vfs_readlink, vfs_rename,
-    vfs_rmdir, vfs_seek, vfs_stat, vfs_symlink, vfs_truncate, vfs_unlink, vfs_write,
+    vfs_access, vfs_fstat, vfs_lstat, vfs_mkdir, vfs_open, vfs_read, vfs_readdir, vfs_readlink,
+    vfs_rename, vfs_rmdir, vfs_seek, vfs_stat, vfs_symlink, vfs_truncate, vfs_unlink, vfs_write,
 };

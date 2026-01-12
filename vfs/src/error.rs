@@ -65,6 +65,8 @@ pub enum VfsError {
     CrossDevice,
     /// Not a symbolic link (EINVAL = 22)
     NotASymlink,
+    /// Too many symbolic links (ELOOP = 40)
+    TooManySymlinks,
     /// Internal kernel error (EIO = 5)
     InternalError,
 }
@@ -99,6 +101,7 @@ impl VfsError {
             VfsError::StaleHandle => errno::ESTALE,
             VfsError::CrossDevice => errno::EXDEV,
             VfsError::NotASymlink => errno::EINVAL,
+            VfsError::TooManySymlinks => errno::ELOOP,
             VfsError::InternalError => errno::EIO,
         }
     }
@@ -131,6 +134,7 @@ impl VfsError {
             VfsError::StaleHandle => "ESTALE",
             VfsError::CrossDevice => "EXDEV",
             VfsError::NotASymlink => "EINVAL",
+            VfsError::TooManySymlinks => "ELOOP",
             VfsError::InternalError => "EIO",
         }
     }
@@ -164,6 +168,7 @@ impl fmt::Display for VfsError {
             VfsError::StaleHandle => "Stale file handle",
             VfsError::CrossDevice => "Invalid cross-device link",
             VfsError::NotASymlink => "Not a symbolic link",
+            VfsError::TooManySymlinks => "Too many levels of symbolic links",
             VfsError::InternalError => "Internal kernel error",
         };
         write!(f, "{} ({})", msg, self.name())

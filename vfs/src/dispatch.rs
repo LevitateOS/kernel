@@ -11,6 +11,7 @@ use alloc::sync::Arc;
 use super::dentry::{Dentry, dcache};
 use super::error::{VfsError, VfsResult};
 use super::file::{File, FileRef, OpenFlags};
+use super::inode::Inode;
 use super::ops::{DirEntry, SetAttr};
 use los_types::{S_IFDIR, S_IFREG, Stat};
 
@@ -104,8 +105,52 @@ pub fn vfs_seek(file: &File, offset: i64, whence: u32) -> VfsResult<u64> {
     file.seek(offset, whence)
 }
 
+/// TEAM_459: Maximum symlink depth when resolving paths
+const MAX_SYMLINK_DEPTH: usize = 8;
+
+/// TEAM_459: Resolve a path, following symlinks
+/// Returns the final inode after following all symlinks.
+fn resolve_symlinks(path: &str) -> VfsResult<Arc<Inode>> {
+    let mut current_path = alloc::string::String::from(path);
+
+    for _ in 0..MAX_SYMLINK_DEPTH {
+        let dentry = dcache().lookup(&current_path)?;
+        let inode = dentry.get_inode().ok_or(VfsError::NotFound)?;
+
+        if !inode.is_symlink() {
+            return Ok(inode);
+        }
+
+        // Read the symlink target
+        let target = inode.readlink()?;
+
+        // Resolve the target path
+        if target.starts_with('/') {
+            // Absolute path
+            current_path = target;
+        } else {
+            // Relative path - resolve relative to parent directory
+            if let Some(parent_end) = current_path.rfind('/') {
+                let parent = &current_path[..parent_end + 1];
+                current_path = alloc::string::String::from(parent) + &target;
+            } else {
+                current_path = target;
+            }
+        }
+    }
+
+    Err(VfsError::TooManySymlinks)
+}
+
 /// TEAM_202: Get file status by path
+/// TEAM_459: Now follows symlinks (like Linux stat())
 pub fn vfs_stat(path: &str) -> VfsResult<Stat> {
+    let inode = resolve_symlinks(path)?;
+    Ok(inode.to_stat())
+}
+
+/// TEAM_459: Get file status by path without following symlinks (lstat)
+pub fn vfs_lstat(path: &str) -> VfsResult<Stat> {
     let dentry = dcache().lookup(path)?;
     let inode = dentry.get_inode().ok_or(VfsError::NotFound)?;
     Ok(inode.to_stat())
