@@ -265,6 +265,7 @@ fn poll_to_tty() {
     // The syscall crate only reads from the HAL console which is always available.
 
     while let Some(byte) = los_hal::console::read_byte() {
+        log::trace!("[TTY] poll_to_tty got byte: {:#x}", byte);
         CONSOLE_TTY.lock().process_input(byte);
     }
 }

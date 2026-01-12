@@ -253,6 +253,7 @@ pub fn sys_ioctl(fd: usize, request: u64, arg: usize) -> SyscallResult {
             },
             TIOCGPGRP => {
                 let fg_pgid = *los_sched::FOREGROUND_PID.lock();
+                log::trace!("[SYSCALL] TIOCGPGRP -> {}", fg_pgid);
                 ioctl_write_i32(task.ttbr0.load(Ordering::Acquire), arg, fg_pgid as i32)
             }
             TIOCSPGRP => match ioctl_read_i32(task.ttbr0.load(Ordering::Acquire), arg) {
@@ -262,7 +263,19 @@ pub fn sys_ioctl(fd: usize, request: u64, arg: usize) -> SyscallResult {
                 }
                 Err(e) => Err(e),
             },
-            TIOCSCTTY => Ok(0), // Set controlling terminal (stub - just succeed)
+            TIOCSCTTY => {
+                // TEAM_459: When a process acquires the controlling terminal,
+                // it becomes the foreground process group. Without this, shells
+                // that call setsid() before opening the TTY will see a pgid mismatch
+                // (TIOCGPGRP returns old value, but shell's pgid changed via setsid).
+                let pgid = task.pgid.load(Ordering::Acquire);
+                let pid = task.id.0;
+                // Use pgid if set, otherwise use pid
+                let fg_pgid = if pgid != 0 { pgid } else { pid };
+                *los_sched::FOREGROUND_PID.lock() = fg_pgid;
+                log::trace!("[SYSCALL] TIOCSCTTY: Set FOREGROUND_PID={}", fg_pgid);
+                Ok(0)
+            }
             // TEAM_441: TIOCGWINSZ - get terminal window size
             TIOCGWINSZ => {
                 // Return a reasonable default terminal size (80x24)

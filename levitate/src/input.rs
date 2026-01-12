@@ -179,11 +179,18 @@ fn poll_input_device<T: virtio_drivers::transport::Transport>(
                             crate::syscall::signal::signal_foreground_process(
                                 crate::syscall::signal::SIGINT,
                             );
+                            // TEAM_459: Also feed Ctrl+C to CONSOLE_TTY for proper TTY handling
+                            los_fs_tty::CONSOLE_TTY.lock().process_input(0x03);
                         } else if let Some(c) = linux_code_to_ascii(code, *SHIFT_PRESSED.lock()) {
                             // TEAM_156: Don't silently drop - log overflow
                             if !KEYBOARD_BUFFER.lock().push(c) {
                                 crate::verbose!("KEYBOARD_BUFFER overflow, char dropped");
                             }
+                            // TEAM_459: Feed character directly to CONSOLE_TTY from interrupt handler.
+                            // This ensures TTY input buffer is filled even when no process is
+                            // actively calling sys_read(). Without this, keys pressed during
+                            // shell blocking would be stuck in KEYBOARD_BUFFER forever.
+                            los_fs_tty::CONSOLE_TTY.lock().process_input(c as u8);
                         }
                     }
                     _ => {}

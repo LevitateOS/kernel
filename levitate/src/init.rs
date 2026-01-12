@@ -556,8 +556,16 @@ fn spawn_init() -> bool {
     // TEAM_121: Spawn init and let the scheduler take over.
     // TEAM_453: Use fd table with stdin/stdout/stderr for BusyBox init
     match crate::process::spawn_from_elf(elf_data, crate::task::fd_table::new_shared_fd_table_with_stdio()) {
-        Ok(task) => {
-            let tcb = Arc::new(TaskControlBlock::from(task));
+        Ok(user_task) => {
+            // TEAM_459: Set foreground process group to init's PID for job control.
+            // Without this, shells spawned by init think they're not in the foreground
+            // and get stuck in a job control loop (TIOCGPGRP returns 0, but shell's
+            // pgid is inherited from init, causing mismatch).
+            let init_pid = user_task.pid.0 as usize;
+            *crate::task::FOREGROUND_PID.lock() = init_pid;
+            log::trace!("[BOOT] Set FOREGROUND_PID={}", init_pid);
+
+            let tcb = Arc::new(TaskControlBlock::from(user_task));
             task::scheduler::SCHEDULER.add_task(tcb);
             log::info!("[BOOT] Init process scheduled.");
             true

@@ -152,16 +152,16 @@ pub unsafe fn set_current_task(task: Arc<TaskControlBlock>) {
 /// [MT4] switch_to() no-ops when switching to same task.
 pub fn switch_to(new_task: Arc<TaskControlBlock>) {
     let old_task = current_task();
-    log::info!(
+    log::trace!(
         "[SWITCH] switch_to called: old PID={} (ptr={:p}), new PID={} (ptr={:p})",
         old_task.id.0, Arc::as_ptr(&old_task),
         new_task.id.0, Arc::as_ptr(&new_task)
     );
     if Arc::ptr_eq(&old_task, &new_task) {
-        log::info!("[SWITCH] Same task, returning early");
+        log::trace!("[SWITCH] Same task, returning early");
         return; // [MT4] no-op for same task
     }
-    log::info!("[SWITCH] Different tasks, proceeding with context switch");
+    log::trace!("[SWITCH] Different tasks, proceeding with context switch");
 
 
     unsafe {

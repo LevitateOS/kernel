@@ -102,8 +102,9 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
     let nr = frame.syscall_number();
 
     // TEAM_456: Debug logging for all syscalls
-    log::debug!(
-        "[SYSCALL] nr={} args=[0x{:x}, 0x{:x}, 0x{:x}, 0x{:x}]",
+    log::trace!(
+        "[SYSCALL] PID={} nr={} args=[0x{:x}, 0x{:x}, 0x{:x}, 0x{:x}]",
+        los_sched::current_task().id.0,
         nr,
         frame.arg0(),
         frame.arg1(),
