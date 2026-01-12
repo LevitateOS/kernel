@@ -20,7 +20,7 @@ pub use fd::{sys_dup, sys_dup2, sys_dup3, sys_fcntl, sys_ioctl, sys_isatty, sys_
 pub use link::{sys_linkat, sys_readlinkat, sys_symlinkat, sys_utimensat};
 pub use mount::{sys_mount, sys_umount};
 pub use open::{sys_close, sys_faccessat, sys_openat};
-pub use read::{sys_read, sys_readv};
-pub use stat::{sys_fstat, sys_fstatat};
+pub use read::{sys_read, sys_readv, sys_sendfile};
+pub use stat::{sys_fstat, sys_fstatat, sys_lstat};
 pub use statx::sys_statx;
 pub use write::{sys_write, sys_writev};

@@ -269,3 +269,160 @@ fn poll_to_tty() {
         CONSOLE_TTY.lock().process_input(byte);
     }
 }
+
+/// TEAM_459: sys_sendfile - Copy data between file descriptors in kernel space.
+///
+/// This avoids copying data through user space, improving performance for
+/// operations like `cat` which read from a file and write to stdout.
+///
+/// # Arguments
+/// * `out_fd` - Output file descriptor (must be writable)
+/// * `in_fd` - Input file descriptor (must be readable)
+/// * `offset_ptr` - Optional pointer to offset in input file (NULL = use current position)
+/// * `count` - Number of bytes to copy
+///
+/// # Returns
+/// * `Ok(n)` - Number of bytes copied
+/// * `Err(errno)` - Error code
+pub fn sys_sendfile(out_fd: i32, in_fd: i32, offset_ptr: usize, count: usize) -> SyscallResult {
+    use crate::read_from_user;
+    use los_vfs::dispatch::{vfs_read, vfs_seek, vfs_write};
+
+    const SEEK_SET: u32 = 0;
+
+    if count == 0 {
+        return Ok(0);
+    }
+
+    let task = los_sched::current_task();
+    let ttbr0 = task.ttbr0.load(Ordering::Acquire);
+
+    // Get input and output file handles
+    let fd_table = task.fd_table.lock();
+    let in_entry = match fd_table.get(in_fd as usize) {
+        Some(e) => e.clone(),
+        None => return Err(EBADF),
+    };
+    let out_entry = match fd_table.get(out_fd as usize) {
+        Some(e) => e.clone(),
+        None => return Err(EBADF),
+    };
+    drop(fd_table);
+
+    // Extract VFS files - sendfile only works with regular files
+    let in_file = match &in_entry.fd_type {
+        FdType::VfsFile(f) => f.clone(),
+        _ => return Err(EBADF),
+    };
+
+    // Handle offset if provided
+    let original_offset = if offset_ptr != 0 {
+        // Read offset from user space
+        if mm_user::validate_user_buffer(ttbr0, offset_ptr, 8, true).is_err() {
+            return Err(EFAULT);
+        }
+        let mut offset_bytes = [0u8; 8];
+        for i in 0..8 {
+            offset_bytes[i] = match read_from_user(ttbr0, offset_ptr + i) {
+                Some(b) => b,
+                None => return Err(EFAULT),
+            };
+        }
+        let offset = i64::from_ne_bytes(offset_bytes);
+        // Save current position and seek to specified offset
+        let orig = in_file.tell() as i64;
+        if vfs_seek(&in_file, offset, SEEK_SET).is_err() {
+            return Err(EINVAL);
+        }
+        Some(orig)
+    } else {
+        None
+    };
+
+    // Copy data in chunks
+    const CHUNK_SIZE: usize = 4096;
+    let mut kbuf = alloc::vec![0u8; CHUNK_SIZE.min(count)];
+    let mut total_copied: usize = 0;
+
+    while total_copied < count {
+        let to_read = CHUNK_SIZE.min(count - total_copied);
+
+        // Read from input file
+        let bytes_read = match vfs_read(&in_file, &mut kbuf[..to_read]) {
+            Ok(0) => break, // EOF
+            Ok(n) => n,
+            Err(_) => {
+                if total_copied == 0 {
+                    return Err(EIO);
+                }
+                break;
+            }
+        };
+
+        // Write to output
+        let bytes_written = match &out_entry.fd_type {
+            FdType::VfsFile(out_file) => match vfs_write(out_file, &kbuf[..bytes_read]) {
+                Ok(n) => n,
+                Err(_) => {
+                    if total_copied == 0 {
+                        return Err(EIO);
+                    }
+                    break;
+                }
+            },
+            FdType::Stdout | FdType::Stderr => {
+                // Write to console - handle output processing
+                let tty = los_fs_tty::CONSOLE_TTY.lock();
+                let oflag = tty.termios.c_oflag;
+                drop(tty);
+
+                for &byte in &kbuf[..bytes_read] {
+                    // Handle OPOST + ONLCR (convert \n to \r\n)
+                    if (oflag & los_fs_tty::OPOST) != 0
+                        && byte == b'\n'
+                        && (oflag & los_fs_tty::ONLCR) != 0
+                    {
+                        los_hal::print!("\r\n");
+                    } else {
+                        los_hal::print!("{}", byte as char);
+                    }
+                }
+                bytes_read
+            }
+            FdType::PipeWrite(pipe) => match pipe.write(&kbuf[..bytes_read]) {
+                Ok(n) => n,
+                Err(e) => {
+                    if total_copied == 0 {
+                        return Err(e);
+                    }
+                    break;
+                }
+            },
+            _ => return Err(EBADF),
+        };
+
+        total_copied += bytes_written;
+
+        if bytes_written < bytes_read {
+            break; // Short write
+        }
+    }
+
+    // Update offset pointer if provided
+    if offset_ptr != 0 {
+        let new_offset = in_file.tell() as i64;
+        let offset_bytes = new_offset.to_ne_bytes();
+        for i in 0..8 {
+            if let Some(ptr) = mm_user::user_va_to_kernel_ptr(ttbr0, offset_ptr + i) {
+                // SAFETY: We validated the buffer above
+                unsafe { *ptr = offset_bytes[i]; }
+            }
+        }
+        // Restore original position if we saved it
+        if let Some(orig) = original_offset {
+            let _ = vfs_seek(&in_file, orig, SEEK_SET);
+        }
+    }
+
+    Ok(total_copied as i64)
+}

@@ -38,6 +38,7 @@ pub enum SyscallNumber {
     Close = 3,
     Stat = 4,  // TEAM_459: stat() - maps to fstatat(AT_FDCWD, ...)
     Fstat = 5,
+    Lstat = 6, // TEAM_459: lstat() - stat without following symlinks
     Poll = 7,  // TEAM_406: I/O multiplexing
     Lseek = 8, // TEAM_404: File positioning
     Mmap = 9,
@@ -151,9 +152,11 @@ pub enum SyscallNumber {
     Prlimit64 = 302, // get/set resource limits
     // TEAM_456: BusyBox syscalls
     Access = 21,           // Legacy access() - maps to faccessat(AT_FDCWD, ...)
+    Sendfile = 40,         // TEAM_459: Copy data between file descriptors
     Socket = 41,           // Socket creation (stub - no network stack yet)
     Sendto = 44,           // Send to socket (stub - no network stack yet)
     RtSigtimedwait = 128,  // Wait for signal with timeout
+    Getdents64 = 217,      // TEAM_459: 64-bit directory entries (BusyBox ls)
 
     // === Custom LevitateOS syscalls ===
     Spawn = 1000,
@@ -172,6 +175,7 @@ impl SyscallNumber {
             3 => Some(Self::Close),
             4 => Some(Self::Stat),  // TEAM_459: Legacy stat()
             5 => Some(Self::Fstat),
+            6 => Some(Self::Lstat),  // TEAM_459: lstat()
             7 => Some(Self::Poll),  // TEAM_406
             8 => Some(Self::Lseek), // TEAM_404
             9 => Some(Self::Mmap),
@@ -283,9 +287,11 @@ impl SyscallNumber {
             262 => Some(Self::Fstatat),
             // TEAM_456: BusyBox syscalls
             21 => Some(Self::Access),
+            40 => Some(Self::Sendfile),  // TEAM_459
             41 => Some(Self::Socket),
             44 => Some(Self::Sendto),
             128 => Some(Self::RtSigtimedwait),
+            217 => Some(Self::Getdents64),  // TEAM_459
             // Custom LevitateOS
             1000 => Some(Self::Spawn),
             1001 => Some(Self::SpawnArgs),

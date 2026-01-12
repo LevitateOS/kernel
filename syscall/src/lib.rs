@@ -166,6 +166,9 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
             0,
         ),
         Some(SyscallNumber::Fstat) => fs::sys_fstat(frame.arg0() as usize, frame.arg1() as usize),
+        // TEAM_459: lstat() - stat without following symlinks
+        #[cfg(target_arch = "x86_64")]
+        Some(SyscallNumber::Lstat) => fs::sys_lstat(frame.arg0() as usize, frame.arg1() as usize),
         // TEAM_404: File positioning and descriptor syscalls
         Some(SyscallNumber::Lseek) => fs::sys_lseek(
             frame.arg0() as usize,
@@ -203,6 +206,13 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
         }
         // TEAM_176: Directory listing syscall
         Some(SyscallNumber::Getdents) => fs::sys_getdents(
+            frame.arg0() as usize,
+            frame.arg1() as usize,
+            frame.arg2() as usize,
+        ),
+        // TEAM_459: getdents64 - same implementation, already uses Dirent64 format
+        #[cfg(target_arch = "x86_64")]
+        Some(SyscallNumber::Getdents64) => fs::sys_getdents(
             frame.arg0() as usize,
             frame.arg1() as usize,
             frame.arg2() as usize,
@@ -596,6 +606,14 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
         Some(SyscallNumber::Truncate) => {
             fs::sys_truncate(frame.arg0() as usize, frame.arg1() as i64)
         }
+        // TEAM_459: sendfile - copy data between file descriptors
+        #[cfg(target_arch = "x86_64")]
+        Some(SyscallNumber::Sendfile) => fs::sys_sendfile(
+            frame.arg0() as i32,
+            frame.arg1() as i32,
+            frame.arg2() as usize,
+            frame.arg3() as usize,
+        ),
         // TEAM_435: Scheduler affinity syscalls for sysinfo/brush
         Some(SyscallNumber::SchedGetaffinity) => process::sys_sched_getaffinity(
             frame.arg0() as i32,

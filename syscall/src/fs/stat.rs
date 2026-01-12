@@ -68,3 +68,24 @@ pub fn sys_fstatat(dirfd: i32, pathname: usize, stat_buf: usize, _flags: i32) ->
     write_struct_to_user(task.ttbr0.load(Ordering::Acquire), stat_buf, &stat)?;
     Ok(0)
 }
+
+/// TEAM_459: sys_lstat - Get file status without following symlinks.
+/// Signature: lstat(pathname, statbuf)
+pub fn sys_lstat(pathname: usize, stat_buf: usize) -> SyscallResult {
+    use crate::resolve_at_path;
+    use linux_raw_sys::general::AT_FDCWD;
+
+    let task = los_sched::current_task();
+
+    // Resolve path relative to CWD
+    let path_str = resolve_at_path(AT_FDCWD, pathname)?;
+
+    // Get file status via VFS (without following symlinks)
+    let stat = match vfs_lstat(&path_str) {
+        Ok(s) => s,
+        Err(e) => return Err(e.to_errno()),
+    };
+
+    write_struct_to_user(task.ttbr0.load(Ordering::Acquire), stat_buf, &stat)?;
+    Ok(0)
+}
