@@ -55,6 +55,111 @@ pub fn sys_getegid() -> SyscallResult {
     Ok(0)
 }
 
+/// TEAM_450: sys_setuid - Set user ID.
+/// TEAM_421: Returns SyscallResult
+///
+/// LevitateOS is single-user, this is a no-op that always succeeds.
+/// Required for BusyBox utilities like `su`, `login`.
+pub fn sys_setuid(_uid: u32) -> SyscallResult {
+    log::trace!("[SYSCALL] setuid({}) -> 0 (no-op)", _uid);
+    Ok(0)
+}
+
+/// TEAM_450: sys_setgid - Set group ID.
+/// TEAM_421: Returns SyscallResult
+///
+/// LevitateOS is single-user, this is a no-op that always succeeds.
+pub fn sys_setgid(_gid: u32) -> SyscallResult {
+    log::trace!("[SYSCALL] setgid({}) -> 0 (no-op)", _gid);
+    Ok(0)
+}
+
+/// TEAM_450: sys_setreuid - Set real and effective user IDs.
+/// TEAM_421: Returns SyscallResult
+///
+/// LevitateOS is single-user, this is a no-op that always succeeds.
+pub fn sys_setreuid(_ruid: u32, _euid: u32) -> SyscallResult {
+    log::trace!("[SYSCALL] setreuid({}, {}) -> 0 (no-op)", _ruid, _euid);
+    Ok(0)
+}
+
+/// TEAM_450: sys_setregid - Set real and effective group IDs.
+/// TEAM_421: Returns SyscallResult
+///
+/// LevitateOS is single-user, this is a no-op that always succeeds.
+pub fn sys_setregid(_rgid: u32, _egid: u32) -> SyscallResult {
+    log::trace!("[SYSCALL] setregid({}, {}) -> 0 (no-op)", _rgid, _egid);
+    Ok(0)
+}
+
+/// TEAM_450: sys_setresuid - Set real, effective, and saved user IDs.
+/// TEAM_421: Returns SyscallResult
+///
+/// LevitateOS is single-user, this is a no-op that always succeeds.
+pub fn sys_setresuid(_ruid: u32, _euid: u32, _suid: u32) -> SyscallResult {
+    log::trace!("[SYSCALL] setresuid({}, {}, {}) -> 0 (no-op)", _ruid, _euid, _suid);
+    Ok(0)
+}
+
+/// TEAM_450: sys_setresgid - Set real, effective, and saved group IDs.
+/// TEAM_421: Returns SyscallResult
+///
+/// LevitateOS is single-user, this is a no-op that always succeeds.
+pub fn sys_setresgid(_rgid: u32, _egid: u32, _sgid: u32) -> SyscallResult {
+    log::trace!("[SYSCALL] setresgid({}, {}, {}) -> 0 (no-op)", _rgid, _egid, _sgid);
+    Ok(0)
+}
+
+/// TEAM_450: sys_getresuid - Get real, effective, and saved user IDs.
+/// TEAM_421: Returns SyscallResult
+///
+/// LevitateOS is single-user, always returns 0 (root) for all.
+pub fn sys_getresuid(ruid: usize, euid: usize, suid: usize) -> SyscallResult {
+    let task = los_sched::current_task();
+
+    // Write 0 (root) to all pointers
+    for ptr in [ruid, euid, suid] {
+        if ptr != 0 {
+            if let Some(kernel_ptr) = mm_user::user_va_to_kernel_ptr(task.ttbr0, ptr) {
+                // SAFETY: We're writing a valid u32 to a user-provided pointer
+                unsafe {
+                    *(kernel_ptr as *mut u32) = 0;
+                }
+            } else {
+                return Err(EFAULT);
+            }
+        }
+    }
+
+    log::trace!("[SYSCALL] getresuid() -> 0");
+    Ok(0)
+}
+
+/// TEAM_450: sys_getresgid - Get real, effective, and saved group IDs.
+/// TEAM_421: Returns SyscallResult
+///
+/// LevitateOS is single-user, always returns 0 (root group) for all.
+pub fn sys_getresgid(rgid: usize, egid: usize, sgid: usize) -> SyscallResult {
+    let task = los_sched::current_task();
+
+    // Write 0 (root group) to all pointers
+    for ptr in [rgid, egid, sgid] {
+        if ptr != 0 {
+            if let Some(kernel_ptr) = mm_user::user_va_to_kernel_ptr(task.ttbr0, ptr) {
+                // SAFETY: We're writing a valid u32 to a user-provided pointer
+                unsafe {
+                    *(kernel_ptr as *mut u32) = 0;
+                }
+            } else {
+                return Err(EFAULT);
+            }
+        }
+    }
+
+    log::trace!("[SYSCALL] getresgid() -> 0");
+    Ok(0)
+}
+
 // ============================================================================
 // TEAM_406: System identification and file creation mask
 // ============================================================================

@@ -16,7 +16,9 @@ mod thread;
 pub use arch_prctl::sys_arch_prctl;
 pub use groups::{sys_getpgid, sys_getpgrp, sys_setpgid, sys_setsid};
 pub use identity::{
-    sys_getegid, sys_geteuid, sys_getgid, sys_gettid, sys_getuid, sys_umask, sys_uname,
+    sys_getegid, sys_geteuid, sys_getgid, sys_getresgid, sys_getresuid, sys_gettid, sys_getuid,
+    sys_setgid, sys_setregid, sys_setresgid, sys_setresuid, sys_setreuid, sys_setuid, sys_umask,
+    sys_uname,
 };
 pub use lifecycle::{
     sys_exec, sys_execve, sys_exit, sys_exit_group, sys_get_foreground, sys_getpid, sys_getppid,

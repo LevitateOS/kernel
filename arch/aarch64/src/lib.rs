@@ -70,6 +70,18 @@ pub enum SyscallNumber {
     Geteuid = 175,
     Getgid = 176,
     Getegid = 177,
+    // TEAM_450: User/group identity syscalls for BusyBox
+    Setregid = 143,
+    Setgid = 144,
+    Setreuid = 145,
+    Setuid = 146,
+    Setresuid = 147,
+    Getresuid = 148,
+    Setresgid = 149,
+    Getresgid = 150,
+    // TEAM_450: Additional file permission syscalls
+    Fchmodat = 53,
+    Fchownat = 54,
     ClockGetres = 114,
     ClockNanosleep = 115, // TEAM_430: Required for thread::sleep
     Madvise = 233,
@@ -191,6 +203,15 @@ impl SyscallNumber {
             175 => Some(Self::Geteuid),
             176 => Some(Self::Getgid),
             177 => Some(Self::Getegid),
+            // TEAM_450: User/group identity syscalls for BusyBox
+            143 => Some(Self::Setregid),
+            144 => Some(Self::Setgid),
+            145 => Some(Self::Setreuid),
+            146 => Some(Self::Setuid),
+            147 => Some(Self::Setresuid),
+            148 => Some(Self::Getresuid),
+            149 => Some(Self::Setresgid),
+            150 => Some(Self::Getresgid),
             114 => Some(Self::ClockGetres),
             115 => Some(Self::ClockNanosleep), // TEAM_430
             233 => Some(Self::Madvise),
@@ -229,7 +250,9 @@ impl SyscallNumber {
             166 => Some(Self::Umask),
             1090 => Some(Self::Chmod),
             52 => Some(Self::Fchmod),
+            53 => Some(Self::Fchmodat),  // TEAM_450
             1092 => Some(Self::Chown),
+            54 => Some(Self::Fchownat),  // TEAM_450
             55 => Some(Self::Fchown),
             // TEAM_409: Additional syscalls for coreutils
             79 => Some(Self::Fstatat),

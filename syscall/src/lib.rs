@@ -233,6 +233,13 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
         Some(SyscallNumber::Umask) => process::sys_umask(frame.arg0() as u32),
         Some(SyscallNumber::Chmod) => fs::sys_chmod(frame.arg0() as usize, frame.arg1() as u32),
         Some(SyscallNumber::Fchmod) => fs::sys_fchmod(frame.arg0() as usize, frame.arg1() as u32),
+        // TEAM_450: fchmodat - chmod relative to directory fd
+        Some(SyscallNumber::Fchmodat) => fs::sys_fchmodat(
+            frame.arg0() as i32,
+            frame.arg1() as usize,
+            frame.arg2() as u32,
+            frame.arg3() as i32,
+        ),
         Some(SyscallNumber::Chown) => fs::sys_chown(
             frame.arg0() as usize,
             frame.arg1() as u32,
@@ -242,6 +249,14 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
             frame.arg0() as usize,
             frame.arg1() as u32,
             frame.arg2() as u32,
+        ),
+        // TEAM_450: fchownat - chown relative to directory fd
+        Some(SyscallNumber::Fchownat) => fs::sys_fchownat(
+            frame.arg0() as i32,
+            frame.arg1() as usize,
+            frame.arg2() as u32,
+            frame.arg3() as u32,
+            frame.arg4() as i32,
         ),
         Some(SyscallNumber::Pause) => signal::sys_pause(),
         // TEAM_441: rt_sigaction takes 4 args: sig, act, oldact, sigsetsize
@@ -320,6 +335,31 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
         Some(SyscallNumber::Geteuid) => process::sys_geteuid(),
         Some(SyscallNumber::Getgid) => process::sys_getgid(),
         Some(SyscallNumber::Getegid) => process::sys_getegid(),
+        // TEAM_450: User/group identity syscalls for BusyBox
+        Some(SyscallNumber::Setuid) => process::sys_setuid(frame.arg0() as u32),
+        Some(SyscallNumber::Setgid) => process::sys_setgid(frame.arg0() as u32),
+        Some(SyscallNumber::Setreuid) => {
+            process::sys_setreuid(frame.arg0() as u32, frame.arg1() as u32)
+        }
+        Some(SyscallNumber::Setregid) => {
+            process::sys_setregid(frame.arg0() as u32, frame.arg1() as u32)
+        }
+        Some(SyscallNumber::Setresuid) => {
+            process::sys_setresuid(frame.arg0() as u32, frame.arg1() as u32, frame.arg2() as u32)
+        }
+        Some(SyscallNumber::Getresuid) => process::sys_getresuid(
+            frame.arg0() as usize,
+            frame.arg1() as usize,
+            frame.arg2() as usize,
+        ),
+        Some(SyscallNumber::Setresgid) => {
+            process::sys_setresgid(frame.arg0() as u32, frame.arg1() as u32, frame.arg2() as u32)
+        }
+        Some(SyscallNumber::Getresgid) => process::sys_getresgid(
+            frame.arg0() as usize,
+            frame.arg1() as usize,
+            frame.arg2() as usize,
+        ),
         Some(SyscallNumber::ClockGetres) => {
             time::sys_clock_getres(frame.arg0() as i32, frame.arg1() as usize)
         }
