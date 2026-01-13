@@ -1,0 +1,14 @@
+[package]
+name = "los_fs_sysfs"
+version = "0.1.0"
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+los_vfs = { path = "../../vfs" }
+los_hal = { path = "../../lib/hal" }
+los_utils = { path = "../../lib/utils" }
+log = "0.4"
+linux-raw-sys = { version = "0.12.1", default-features = false, features = ["general", "no_std"] }

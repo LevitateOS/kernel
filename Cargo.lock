@@ -399,6 +399,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "los_fs_procfs"
+version = "0.1.0"
+dependencies = [
+ "linux-raw-sys",
+ "log",
+ "los_hal",
+ "los_mm",
+ "los_sched",
+ "los_utils",
+ "los_vfs",
+]
+
+[[package]]
+name = "los_fs_sysfs"
+version = "0.1.0"
+dependencies = [
+ "linux-raw-sys",
+ "log",
+ "los_hal",
+ "los_utils",
+ "los_vfs",
+]
+
+[[package]]
 name = "los_fs_tmpfs"
 version = "0.1.0"
 dependencies = [
@@ -496,6 +520,9 @@ dependencies = [
  "los_arch_aarch64",
  "los_arch_x86_64",
  "los_error",
+ "los_fs_procfs",
+ "los_fs_sysfs",
+ "los_fs_tmpfs",
  "los_fs_tty",
  "los_hal",
  "los_mm",

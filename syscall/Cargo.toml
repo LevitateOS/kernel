@@ -18,6 +18,9 @@ los_mm = { path = "../mm" }
 los_sched = { path = "../sched" }
 los_vfs = { path = "../vfs" }
 los_fs_tty = { path = "../fs/tty" }
+los_fs_tmpfs = { path = "../fs/tmpfs" }
+los_fs_procfs = { path = "../fs/procfs" }
+los_fs_sysfs = { path = "../fs/sysfs" }
 los_types = { path = "../lib/types" }
 log = "0.4"
 bitflags = { workspace = true }

@@ -65,6 +65,10 @@ pub enum FsType {
     Fat32,
     /// ext4 filesystem (read-only)
     Ext4,
+    /// TEAM_469: Process filesystem (pseudo-fs exposing kernel state)
+    Procfs,
+    /// TEAM_469: System filesystem (pseudo-fs exposing device hierarchy)
+    Sysfs,
 }
 
 impl FsType {
@@ -75,6 +79,8 @@ impl FsType {
             FsType::Initramfs => "initramfs",
             FsType::Fat32 => "fat32",
             FsType::Ext4 => "ext4",
+            FsType::Procfs => "proc",
+            FsType::Sysfs => "sysfs",
         }
     }
 }
@@ -88,6 +94,9 @@ impl core::convert::TryFrom<&str> for FsType {
             "initramfs" => Ok(FsType::Initramfs),
             "fat32" => Ok(FsType::Fat32),
             "ext4" => Ok(FsType::Ext4),
+            // TEAM_469: Add procfs and sysfs support
+            "proc" => Ok(FsType::Procfs),
+            "sysfs" => Ok(FsType::Sysfs),
             _ => Err(MountError::UnsupportedFsType),
         }
     }
