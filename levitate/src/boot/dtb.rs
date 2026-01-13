@@ -87,11 +87,10 @@ fn add_memory_region_with_kernel_split(boot_info: &mut BootInfo, start: usize, e
     // Check if this region overlaps with kernel
     if end <= KERNEL_PHYS_START || start >= KERNEL_PHYS_END {
         // No overlap - add as usable
-        let _ = boot_info.memory_map.push(MemoryRegion::new(
-            start,
-            end - start,
-            MemoryKind::Usable,
-        ));
+        let _ =
+            boot_info
+                .memory_map
+                .push(MemoryRegion::new(start, end - start, MemoryKind::Usable));
     } else {
         // Region overlaps with kernel - split into parts
         // Part before kernel

@@ -34,9 +34,9 @@ pub enum SyscallNumber {
     // === Standard Linux x86_64 syscalls ===
     Read = 0,
     Write = 1,
-    Open = 2,  // TEAM_444: Legacy open() - maps to openat(AT_FDCWD, ...)
+    Open = 2, // TEAM_444: Legacy open() - maps to openat(AT_FDCWD, ...)
     Close = 3,
-    Stat = 4,  // TEAM_459: stat() - maps to fstatat(AT_FDCWD, ...)
+    Stat = 4, // TEAM_459: stat() - maps to fstatat(AT_FDCWD, ...)
     Fstat = 5,
     Lstat = 6, // TEAM_459: lstat() - stat without following symlinks
     Poll = 7,  // TEAM_406: I/O multiplexing
@@ -159,12 +159,12 @@ pub enum SyscallNumber {
     Fstatat = 262,   // newfstatat - stat relative to dirfd
     Prlimit64 = 302, // get/set resource limits
     // TEAM_456: BusyBox syscalls
-    Access = 21,           // Legacy access() - maps to faccessat(AT_FDCWD, ...)
-    Sendfile = 40,         // TEAM_459: Copy data between file descriptors
-    Socket = 41,           // Socket creation (stub - no network stack yet)
-    Sendto = 44,           // Send to socket (stub - no network stack yet)
-    RtSigtimedwait = 128,  // Wait for signal with timeout
-    Getdents64 = 217,      // TEAM_459: 64-bit directory entries (BusyBox ls)
+    Access = 21,          // Legacy access() - maps to faccessat(AT_FDCWD, ...)
+    Sendfile = 40,        // TEAM_459: Copy data between file descriptors
+    Socket = 41,          // Socket creation (stub - no network stack yet)
+    Sendto = 44,          // Send to socket (stub - no network stack yet)
+    RtSigtimedwait = 128, // Wait for signal with timeout
+    Getdents64 = 217,     // TEAM_459: 64-bit directory entries (BusyBox ls)
 
     // === Custom LevitateOS syscalls ===
     Spawn = 1000,
@@ -179,11 +179,11 @@ impl SyscallNumber {
         match n {
             0 => Some(Self::Read),
             1 => Some(Self::Write),
-            2 => Some(Self::Open),  // TEAM_444: Legacy open()
+            2 => Some(Self::Open), // TEAM_444: Legacy open()
             3 => Some(Self::Close),
-            4 => Some(Self::Stat),  // TEAM_459: Legacy stat()
+            4 => Some(Self::Stat), // TEAM_459: Legacy stat()
             5 => Some(Self::Fstat),
-            6 => Some(Self::Lstat),  // TEAM_459: lstat()
+            6 => Some(Self::Lstat), // TEAM_459: lstat()
             7 => Some(Self::Poll),  // TEAM_406
             8 => Some(Self::Lseek), // TEAM_404
             9 => Some(Self::Mmap),
@@ -221,11 +221,11 @@ impl SyscallNumber {
             77 => Some(Self::Ftruncate),    // TEAM_404
             78 => Some(Self::Getdents),
             79 => Some(Self::Getcwd),
-            80 => Some(Self::Chdir),  // TEAM_404
-            81 => Some(Self::Fchdir), // TEAM_404
-            82 => Some(Self::Rename), // TEAM_466
-            84 => Some(Self::Rmdir),  // TEAM_466
-            87 => Some(Self::Unlink), // TEAM_466
+            80 => Some(Self::Chdir),   // TEAM_404
+            81 => Some(Self::Fchdir),  // TEAM_404
+            82 => Some(Self::Rename),  // TEAM_466
+            84 => Some(Self::Rmdir),   // TEAM_466
+            87 => Some(Self::Unlink),  // TEAM_466
             88 => Some(Self::Symlink), // TEAM_466
             110 => Some(Self::GetPpid),
             165 => Some(Self::Mount),
@@ -301,11 +301,11 @@ impl SyscallNumber {
             262 => Some(Self::Fstatat),
             // TEAM_456: BusyBox syscalls
             21 => Some(Self::Access),
-            40 => Some(Self::Sendfile),  // TEAM_459
+            40 => Some(Self::Sendfile), // TEAM_459
             41 => Some(Self::Socket),
             44 => Some(Self::Sendto),
             128 => Some(Self::RtSigtimedwait),
-            217 => Some(Self::Getdents64),  // TEAM_459
+            217 => Some(Self::Getdents64), // TEAM_459
             // Custom LevitateOS
             1000 => Some(Self::Spawn),
             1001 => Some(Self::SpawnArgs),
@@ -510,7 +510,7 @@ pub static mut DEBUG_RSP: u64 = 0;
 pub static mut DEBUG_STACK0: u64 = 0;
 #[used]
 #[unsafe(no_mangle)]
-pub static mut DEBUG_STACK7: u64 = 0;  // rcx offset
+pub static mut DEBUG_STACK7: u64 = 0; // rcx offset
 #[used]
 #[unsafe(no_mangle)]
 pub static mut DEBUG_STACK15: u64 = 0; // rsp offset

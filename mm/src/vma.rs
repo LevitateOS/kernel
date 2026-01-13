@@ -133,11 +133,7 @@ impl VmaList {
             .unwrap_or_else(|i| i);
 
         // The VMA at idx-1 (if exists) has start <= addr
-        if idx > 0 {
-            Some(idx - 1)
-        } else {
-            None
-        }
+        if idx > 0 { Some(idx - 1) } else { None }
     }
 
     /// Insert a new VMA. Returns error if it overlaps existing.
@@ -233,11 +229,7 @@ impl VmaList {
         let vma = &self.vmas[idx];
 
         // Check if addr is actually within this VMA's range
-        if vma.contains(addr) {
-            Some(vma)
-        } else {
-            None
-        }
+        if vma.contains(addr) { Some(vma) } else { None }
     }
 
     /// Find all VMAs overlapping the given range.
@@ -497,10 +489,14 @@ mod tests {
         let mut list = VmaList::new();
 
         // Insert in random order
-        list.insert(Vma::new(0x5000, 0x6000, VmaFlags::READ)).unwrap();
-        list.insert(Vma::new(0x1000, 0x2000, VmaFlags::READ)).unwrap();
-        list.insert(Vma::new(0x9000, 0xA000, VmaFlags::READ)).unwrap();
-        list.insert(Vma::new(0x3000, 0x4000, VmaFlags::READ)).unwrap();
+        list.insert(Vma::new(0x5000, 0x6000, VmaFlags::READ))
+            .unwrap();
+        list.insert(Vma::new(0x1000, 0x2000, VmaFlags::READ))
+            .unwrap();
+        list.insert(Vma::new(0x9000, 0xA000, VmaFlags::READ))
+            .unwrap();
+        list.insert(Vma::new(0x3000, 0x4000, VmaFlags::READ))
+            .unwrap();
 
         // Verify sorted order
         let starts: Vec<_> = list.iter().map(|v| v.start).collect();
@@ -510,16 +506,29 @@ mod tests {
     #[test]
     fn test_overlap_detection_edge_cases() {
         let mut list = VmaList::new();
-        list.insert(Vma::new(0x2000, 0x4000, VmaFlags::READ)).unwrap();
+        list.insert(Vma::new(0x2000, 0x4000, VmaFlags::READ))
+            .unwrap();
 
         // Adjacent (should succeed - no overlap)
-        assert!(list.insert(Vma::new(0x4000, 0x5000, VmaFlags::READ)).is_ok());
-        assert!(list.insert(Vma::new(0x1000, 0x2000, VmaFlags::READ)).is_ok());
+        assert!(
+            list.insert(Vma::new(0x4000, 0x5000, VmaFlags::READ))
+                .is_ok()
+        );
+        assert!(
+            list.insert(Vma::new(0x1000, 0x2000, VmaFlags::READ))
+                .is_ok()
+        );
 
         // Overlapping with existing [0x2000-0x4000] (should fail)
         // Use page-aligned addresses
-        assert!(list.insert(Vma::new(0x3000, 0x5000, VmaFlags::READ)).is_err());
-        assert!(list.insert(Vma::new(0x0000, 0x3000, VmaFlags::READ)).is_err());
+        assert!(
+            list.insert(Vma::new(0x3000, 0x5000, VmaFlags::READ))
+                .is_err()
+        );
+        assert!(
+            list.insert(Vma::new(0x0000, 0x3000, VmaFlags::READ))
+                .is_err()
+        );
     }
 
     // === TEAM_462: Tests for is_page_aligned helper usage ===
@@ -569,8 +578,18 @@ mod tests {
             let up = page_align_up(addr);
 
             // Aligned results should pass is_page_aligned
-            assert!(is_page_aligned(down), "page_align_down(0x{:x}) = 0x{:x} should be aligned", addr, down);
-            assert!(is_page_aligned(up), "page_align_up(0x{:x}) = 0x{:x} should be aligned", addr, up);
+            assert!(
+                is_page_aligned(down),
+                "page_align_down(0x{:x}) = 0x{:x} should be aligned",
+                addr,
+                down
+            );
+            assert!(
+                is_page_aligned(up),
+                "page_align_up(0x{:x}) = 0x{:x} should be aligned",
+                addr,
+                up
+            );
 
             // down <= addr <= up
             assert!(down <= addr, "page_align_down should not exceed input");
@@ -592,13 +611,17 @@ mod tests {
         let mut list = VmaList::new();
 
         // Simulate ELF segment: unaligned input, aligned for VMA
-        let elf_start = 0x400078;  // Typical ELF entry point
+        let elf_start = 0x400078; // Typical ELF entry point
         let elf_end = 0x401234;
         let aligned_start = page_align_down(elf_start);
         let aligned_end = page_align_up(elf_end);
 
-        list.insert(Vma::new(aligned_start, aligned_end, VmaFlags::READ | VmaFlags::EXEC))
-            .expect("Should insert ELF text segment VMA");
+        list.insert(Vma::new(
+            aligned_start,
+            aligned_end,
+            VmaFlags::READ | VmaFlags::EXEC,
+        ))
+        .expect("Should insert ELF text segment VMA");
 
         // Verify the VMA covers the original range
         assert!(list.find(elf_start).is_some());
@@ -607,8 +630,12 @@ mod tests {
         // Simulate stack: already page-aligned
         let stack_bottom = 0x7FFF_FFF7_0000;
         let stack_top = 0x7FFF_FFFF_0000;
-        list.insert(Vma::new(stack_bottom, stack_top, VmaFlags::READ | VmaFlags::WRITE))
-            .expect("Should insert stack VMA");
+        list.insert(Vma::new(
+            stack_bottom,
+            stack_top,
+            VmaFlags::READ | VmaFlags::WRITE,
+        ))
+        .expect("Should insert stack VMA");
 
         assert!(list.find(stack_bottom).is_some());
         assert!(list.find(stack_top - 1).is_some());

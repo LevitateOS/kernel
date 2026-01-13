@@ -97,7 +97,12 @@ pub fn sys_setregid(_rgid: u32, _egid: u32) -> SyscallResult {
 ///
 /// LevitateOS is single-user, this is a no-op that always succeeds.
 pub fn sys_setresuid(_ruid: u32, _euid: u32, _suid: u32) -> SyscallResult {
-    log::trace!("[SYSCALL] setresuid({}, {}, {}) -> 0 (no-op)", _ruid, _euid, _suid);
+    log::trace!(
+        "[SYSCALL] setresuid({}, {}, {}) -> 0 (no-op)",
+        _ruid,
+        _euid,
+        _suid
+    );
     Ok(0)
 }
 
@@ -106,7 +111,12 @@ pub fn sys_setresuid(_ruid: u32, _euid: u32, _suid: u32) -> SyscallResult {
 ///
 /// LevitateOS is single-user, this is a no-op that always succeeds.
 pub fn sys_setresgid(_rgid: u32, _egid: u32, _sgid: u32) -> SyscallResult {
-    log::trace!("[SYSCALL] setresgid({}, {}, {}) -> 0 (no-op)", _rgid, _egid, _sgid);
+    log::trace!(
+        "[SYSCALL] setresgid({}, {}, {}) -> 0 (no-op)",
+        _rgid,
+        _egid,
+        _sgid
+    );
     Ok(0)
 }
 
@@ -120,7 +130,9 @@ pub fn sys_getresuid(ruid: usize, euid: usize, suid: usize) -> SyscallResult {
     // Write 0 (root) to all pointers
     for ptr in [ruid, euid, suid] {
         if ptr != 0 {
-            if let Some(kernel_ptr) = mm_user::user_va_to_kernel_ptr(task.ttbr0.load(Ordering::Acquire), ptr) {
+            if let Some(kernel_ptr) =
+                mm_user::user_va_to_kernel_ptr(task.ttbr0.load(Ordering::Acquire), ptr)
+            {
                 // SAFETY: We're writing a valid u32 to a user-provided pointer
                 unsafe {
                     *(kernel_ptr as *mut u32) = 0;
@@ -145,7 +157,9 @@ pub fn sys_getresgid(rgid: usize, egid: usize, sgid: usize) -> SyscallResult {
     // Write 0 (root group) to all pointers
     for ptr in [rgid, egid, sgid] {
         if ptr != 0 {
-            if let Some(kernel_ptr) = mm_user::user_va_to_kernel_ptr(task.ttbr0.load(Ordering::Acquire), ptr) {
+            if let Some(kernel_ptr) =
+                mm_user::user_va_to_kernel_ptr(task.ttbr0.load(Ordering::Acquire), ptr)
+            {
                 // SAFETY: We're writing a valid u32 to a user-provided pointer
                 unsafe {
                     *(kernel_ptr as *mut u32) = 0;
@@ -235,7 +249,9 @@ pub fn sys_uname(buf: usize) -> SyscallResult {
         unsafe { core::slice::from_raw_parts(&utsname as *const Utsname as *const u8, size) };
 
     for (i, &byte) in bytes.iter().enumerate() {
-        if let Some(ptr) = mm_user::user_va_to_kernel_ptr(task.ttbr0.load(Ordering::Acquire), buf + i) {
+        if let Some(ptr) =
+            mm_user::user_va_to_kernel_ptr(task.ttbr0.load(Ordering::Acquire), buf + i)
+        {
             // SAFETY: We validated the buffer above
             unsafe {
                 *ptr = byte;

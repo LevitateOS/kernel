@@ -15,8 +15,8 @@ use los_vfs::inode::Inode;
 use los_vfs::mode;
 use los_vfs::ops::{DirEntry, InodeOps};
 
-use super::node::{TmpfsNode, TmpfsNodeType, add_child};
 use super::Tmpfs;
+use super::node::{TmpfsNode, TmpfsNodeType, add_child};
 
 /// TEAM_203: Tmpfs Directory Operations
 pub(super) struct TmpfsDirOps;
@@ -36,7 +36,10 @@ impl InodeOps for TmpfsDirOps {
             if entry.name == name {
                 // TEAM_466: Use inode's superblock, not global singleton
                 let sb = inode.sb.upgrade().ok_or(VfsError::IoError)?;
-                let tmpfs = sb.as_any().downcast_ref::<Tmpfs>().ok_or(VfsError::IoError)?;
+                let tmpfs = sb
+                    .as_any()
+                    .downcast_ref::<Tmpfs>()
+                    .ok_or(VfsError::IoError)?;
                 return Ok(tmpfs.make_inode(Arc::clone(&entry.node), Arc::downgrade(&sb)));
             }
         }
@@ -101,7 +104,10 @@ impl InodeOps for TmpfsDirOps {
 
         // TEAM_466: Use inode's superblock, not global singleton
         let sb = inode.sb.upgrade().ok_or(VfsError::IoError)?;
-        let tmpfs = sb.as_any().downcast_ref::<Tmpfs>().ok_or(VfsError::IoError)?;
+        let tmpfs = sb
+            .as_any()
+            .downcast_ref::<Tmpfs>()
+            .ok_or(VfsError::IoError)?;
 
         let ino = tmpfs.alloc_ino();
         let new_node = Arc::new(Mutex::new(TmpfsNode::new_file(ino)));
@@ -117,7 +123,10 @@ impl InodeOps for TmpfsDirOps {
 
         // TEAM_466: Use inode's superblock, not global singleton
         let sb = inode.sb.upgrade().ok_or(VfsError::IoError)?;
-        let tmpfs = sb.as_any().downcast_ref::<Tmpfs>().ok_or(VfsError::IoError)?;
+        let tmpfs = sb
+            .as_any()
+            .downcast_ref::<Tmpfs>()
+            .ok_or(VfsError::IoError)?;
 
         let ino = tmpfs.alloc_ino();
         let new_node = Arc::new(Mutex::new(TmpfsNode::new_dir(ino)));
@@ -133,7 +142,10 @@ impl InodeOps for TmpfsDirOps {
 
         // TEAM_466: Use inode's superblock, not global singleton
         let sb = inode.sb.upgrade().ok_or(VfsError::IoError)?;
-        let tmpfs = sb.as_any().downcast_ref::<Tmpfs>().ok_or(VfsError::IoError)?;
+        let tmpfs = sb
+            .as_any()
+            .downcast_ref::<Tmpfs>()
+            .ok_or(VfsError::IoError)?;
 
         let ino = tmpfs.alloc_ino();
         let new_node = Arc::new(Mutex::new(TmpfsNode::new_symlink(ino, target)));
@@ -216,7 +228,10 @@ impl InodeOps for TmpfsDirOps {
                 // TEAM_466: Use inode's superblock, not global singleton
                 // Update bytes_used if it was a file/symlink
                 let sb = old_dir.sb.upgrade().ok_or(VfsError::IoError)?;
-                let tmpfs = sb.as_any().downcast_ref::<Tmpfs>().ok_or(VfsError::IoError)?;
+                let tmpfs = sb
+                    .as_any()
+                    .downcast_ref::<Tmpfs>()
+                    .ok_or(VfsError::IoError)?;
                 if !existing.node.lock().is_dir() {
                     tmpfs
                         .bytes_used
@@ -274,7 +289,10 @@ impl InodeOps for TmpfsDirOps {
                 // TEAM_466: Use inode's superblock, not global singleton
                 // Update bytes_used if it was a file/symlink
                 let sb = old_dir.sb.upgrade().ok_or(VfsError::IoError)?;
-                let tmpfs = sb.as_any().downcast_ref::<Tmpfs>().ok_or(VfsError::IoError)?;
+                let tmpfs = sb
+                    .as_any()
+                    .downcast_ref::<Tmpfs>()
+                    .ok_or(VfsError::IoError)?;
                 if !existing_node.lock().is_dir() {
                     tmpfs
                         .bytes_used
@@ -319,7 +337,10 @@ impl InodeOps for TmpfsDirOps {
             // If it was the last link, decrement bytes_used
             if child_locked.nlink == 0 {
                 let sb = inode.sb.upgrade().ok_or(VfsError::IoError)?;
-                let tmpfs = sb.as_any().downcast_ref::<Tmpfs>().ok_or(VfsError::IoError)?;
+                let tmpfs = sb
+                    .as_any()
+                    .downcast_ref::<Tmpfs>()
+                    .ok_or(VfsError::IoError)?;
                 tmpfs
                     .bytes_used
                     .fetch_sub(child_locked.data.len(), Ordering::SeqCst);

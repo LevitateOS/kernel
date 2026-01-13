@@ -23,8 +23,8 @@ use los_vfs::superblock::Superblock;
 
 // Submodules
 mod device_ops;
-mod dir_ops;
 pub mod devices;
+mod dir_ops;
 pub mod node;
 mod superblock;
 
@@ -36,7 +36,9 @@ pub static DEVTMPFS: Mutex<Option<Arc<Devtmpfs>>> = Mutex::new(None);
 
 /// TEAM_431: Initialize the devtmpfs with standard device nodes
 pub fn init() {
-    use devices::devno::{MEM_MAJOR, NULL_MINOR, ZERO_MINOR, FULL_MINOR, URANDOM_MINOR, TTY_MAJOR, CONSOLE_MINOR};
+    use devices::devno::{
+        CONSOLE_MINOR, FULL_MINOR, MEM_MAJOR, NULL_MINOR, TTY_MAJOR, URANDOM_MINOR, ZERO_MINOR,
+    };
     use devices::makedev;
 
     // Register built-in device drivers

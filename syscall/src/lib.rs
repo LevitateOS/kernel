@@ -227,9 +227,11 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
         ),
         // TEAM_188: Wait for child process
         // TEAM_460: Pass options (arg2) for WNOHANG support
-        Some(SyscallNumber::Waitpid) => {
-            process::sys_waitpid(frame.arg0() as i32, frame.arg1() as usize, frame.arg2() as u32)
-        }
+        Some(SyscallNumber::Waitpid) => process::sys_waitpid(
+            frame.arg0() as i32,
+            frame.arg1() as usize,
+            frame.arg2() as u32,
+        ),
         Some(SyscallNumber::Getcwd) => fs::sys_getcwd(frame.arg0() as usize, frame.arg1() as usize),
         // TEAM_460: mkdir(pathname, mode) -> mkdirat(AT_FDCWD, pathname, mode)
         // TEAM_461: x86_64 only - aarch64 doesn't have mkdir syscall (uses mkdirat directly)
@@ -473,17 +475,21 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
         Some(SyscallNumber::Setregid) => {
             process::sys_setregid(frame.arg0() as u32, frame.arg1() as u32)
         }
-        Some(SyscallNumber::Setresuid) => {
-            process::sys_setresuid(frame.arg0() as u32, frame.arg1() as u32, frame.arg2() as u32)
-        }
+        Some(SyscallNumber::Setresuid) => process::sys_setresuid(
+            frame.arg0() as u32,
+            frame.arg1() as u32,
+            frame.arg2() as u32,
+        ),
         Some(SyscallNumber::Getresuid) => process::sys_getresuid(
             frame.arg0() as usize,
             frame.arg1() as usize,
             frame.arg2() as usize,
         ),
-        Some(SyscallNumber::Setresgid) => {
-            process::sys_setresgid(frame.arg0() as u32, frame.arg1() as u32, frame.arg2() as u32)
-        }
+        Some(SyscallNumber::Setresgid) => process::sys_setresgid(
+            frame.arg0() as u32,
+            frame.arg1() as u32,
+            frame.arg2() as u32,
+        ),
         Some(SyscallNumber::Getresgid) => process::sys_getresgid(
             frame.arg0() as usize,
             frame.arg1() as usize,
@@ -683,12 +689,7 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
 }
 
 /// TEAM_446: Made public for use by levitate crate
-pub fn write_to_user_buf(
-    ttbr0: usize,
-    user_buf_base: usize,
-    offset: usize,
-    byte: u8,
-) -> bool {
+pub fn write_to_user_buf(ttbr0: usize, user_buf_base: usize, offset: usize, byte: u8) -> bool {
     let user_va = user_buf_base + offset;
     if let Some(kernel_ptr) = los_mm::user::user_va_to_kernel_ptr(ttbr0, user_va) {
         // SAFETY: user_va_to_kernel_ptr ensures the address is mapped and valid.

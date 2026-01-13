@@ -188,8 +188,8 @@ mod tests {
     #[test]
     fn test_reexport_through_mem_module() {
         // Verify constants are accessible through crate::mem
-        use crate::mem::{PAGE_SIZE, PAGE_SHIFT, PAGE_MASK};
-        use crate::mem::{page_align_down, page_align_up, is_page_aligned, pages_needed};
+        use crate::mem::{PAGE_MASK, PAGE_SHIFT, PAGE_SIZE};
+        use crate::mem::{is_page_aligned, page_align_down, page_align_up, pages_needed};
 
         assert_eq!(PAGE_SIZE, 4096);
         assert_eq!(PAGE_SHIFT, 12);
@@ -266,8 +266,17 @@ mod tests {
         // This is equivalent to ceiling division: (size + PAGE_SIZE - 1) / PAGE_SIZE
 
         for size in [0, 1, 0xFFF, 0x1000, 0x1001, 0x2000, 0x12345] {
-            let expected = if size == 0 { 0 } else { (size + PAGE_SIZE - 1) / PAGE_SIZE };
-            assert_eq!(pages_needed(size), expected, "pages_needed({}) failed", size);
+            let expected = if size == 0 {
+                0
+            } else {
+                (size + PAGE_SIZE - 1) / PAGE_SIZE
+            };
+            assert_eq!(
+                pages_needed(size),
+                expected,
+                "pages_needed({}) failed",
+                size
+            );
         }
     }
 }

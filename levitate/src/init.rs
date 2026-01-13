@@ -457,7 +457,7 @@ fn register_process_hooks() {
     // TEAM_456: Now follows symlinks to resolve the actual executable
     // TEAM_464: Use linux-raw-sys constants as canonical source for errno values
     fn resolve_executable(path: &str) -> Result<alloc::vec::Vec<u8>, u32> {
-        use linux_raw_sys::errno::{ENOENT, ELOOP};
+        use linux_raw_sys::errno::{ELOOP, ENOENT};
         const MAX_SYMLINK_DEPTH: usize = 8;
 
         let archive_lock = crate::fs::INITRAMFS.lock();
@@ -469,7 +469,8 @@ fn register_process_hooks() {
         let mut current_path = alloc::string::String::from(path.trim_start_matches('/'));
 
         for _ in 0..MAX_SYMLINK_DEPTH {
-            let entry = sb.archive
+            let entry = sb
+                .archive
                 .iter()
                 .find(|e| e.name == current_path.as_str())
                 .ok_or(ENOENT)?;
@@ -477,8 +478,7 @@ fn register_process_hooks() {
             // Check if it's a symlink
             if entry.entry_type == los_utils::cpio::CpioEntryType::Symlink {
                 // Symlink data contains the target path
-                let target = core::str::from_utf8(entry.data)
-                    .map_err(|_| ENOENT)?;
+                let target = core::str::from_utf8(entry.data).map_err(|_| ENOENT)?;
 
                 // Resolve relative symlinks
                 if target.starts_with('/') {
@@ -537,7 +537,8 @@ fn register_process_hooks() {
 
     RESOLVE_EXECUTABLE_HOOK.store(resolve_executable as *mut (), Ordering::Release);
     SPAWN_FROM_ELF_HOOK.store(spawn_from_elf_hook as *mut (), Ordering::Release);
-    SPAWN_FROM_ELF_WITH_ARGS_HOOK.store(spawn_from_elf_with_args_hook as *mut (), Ordering::Release);
+    SPAWN_FROM_ELF_WITH_ARGS_HOOK
+        .store(spawn_from_elf_with_args_hook as *mut (), Ordering::Release);
     PREPARE_EXEC_IMAGE_HOOK.store(prepare_exec_image_hook as *mut (), Ordering::Release);
 
     log::trace!("[BOOT] Process hooks registered");
@@ -563,7 +564,10 @@ fn spawn_init() -> bool {
 
     // TEAM_121: Spawn init and let the scheduler take over.
     // TEAM_453: Use fd table with stdin/stdout/stderr for BusyBox init
-    match crate::process::spawn_from_elf(elf_data, crate::task::fd_table::new_shared_fd_table_with_stdio()) {
+    match crate::process::spawn_from_elf(
+        elf_data,
+        crate::task::fd_table::new_shared_fd_table_with_stdio(),
+    ) {
         Ok(user_task) => {
             // TEAM_459: Set foreground process group to init's PID for job control.
             // Without this, shells spawned by init think they're not in the foreground

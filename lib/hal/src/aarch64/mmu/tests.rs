@@ -373,7 +373,7 @@ fn test_table_reclamation() {
 #[test]
 fn test_page_align_helpers_available() {
     // Verify helpers are accessible through the constants re-export
-    use super::constants::{page_align_down, page_align_up, is_page_aligned, pages_needed};
+    use super::constants::{is_page_aligned, page_align_down, page_align_up, pages_needed};
 
     // Basic sanity checks
     assert_eq!(page_align_down(0x1234), 0x1000);
@@ -391,12 +391,12 @@ fn test_identity_map_range_alignment() {
     // Calculate expected page counts for various ranges
     let test_cases = [
         // (start, end, expected_pages)
-        (0x1000, 0x2000, 1),      // Already aligned, 1 page
-        (0x1000, 0x3000, 2),      // Already aligned, 2 pages
-        (0x1234, 0x2000, 1),      // Start unaligned, aligns down to 0x1000
-        (0x1000, 0x2345, 2),      // End unaligned, aligns up to 0x3000
-        (0x1234, 0x2345, 2),      // Both unaligned: 0x1000 to 0x3000 = 2 pages
-        (0x1001, 0x1002, 1),      // Tiny range within same page
+        (0x1000, 0x2000, 1), // Already aligned, 1 page
+        (0x1000, 0x3000, 2), // Already aligned, 2 pages
+        (0x1234, 0x2000, 1), // Start unaligned, aligns down to 0x1000
+        (0x1000, 0x2345, 2), // End unaligned, aligns up to 0x3000
+        (0x1234, 0x2345, 2), // Both unaligned: 0x1000 to 0x3000 = 2 pages
+        (0x1001, 0x1002, 1), // Tiny range within same page
     ];
 
     for (start, end, expected_pages) in test_cases {
@@ -419,12 +419,12 @@ fn test_map_range_alignment() {
 
     let test_cases = [
         // (va_start, len, expected_pages)
-        (0x1000, 0x1000, 1),      // Aligned, 1 page
-        (0x1000, 0x2000, 2),      // Aligned, 2 pages
-        (0x1234, 0x1000, 2),      // Start at 0x1234, len 0x1000 -> end at 0x2234
-                                  // Aligned: 0x1000 to 0x3000 = 2 pages
-        (0x1000, 0x1001, 2),      // Len just over page boundary
-        (0x1FFF, 0x0002, 2),      // Crosses page boundary
+        (0x1000, 0x1000, 1), // Aligned, 1 page
+        (0x1000, 0x2000, 2), // Aligned, 2 pages
+        (0x1234, 0x1000, 2), // Start at 0x1234, len 0x1000 -> end at 0x2234
+        // Aligned: 0x1000 to 0x3000 = 2 pages
+        (0x1000, 0x1001, 2), // Len just over page boundary
+        (0x1FFF, 0x0002, 2), // Crosses page boundary
     ];
 
     for (va_start, len, expected_pages) in test_cases {
@@ -457,7 +457,7 @@ fn test_mapping_stats_with_alignment() {
     // Verify MappingStats calculations with aligned addresses
     let stats = MappingStats {
         blocks_2mb: 10,
-        pages_4kb: 512,  // 512 * 4KB = 2MB
+        pages_4kb: 512, // 512 * 4KB = 2MB
     };
 
     // 10 * 2MB + 512 * 4KB = 20MB + 2MB = 22MB
@@ -472,12 +472,11 @@ fn test_translate_uses_page_mask() {
     // The translate function uses PAGE_MASK instead of hardcoded 0xFFF
 
     let mut root = PageTable::new();
-    let va = 0x4444_5678usize;  // VA with offset 0x678
-    let pa = 0x4444_5000usize;  // Page-aligned PA
+    let va = 0x4444_5678usize; // VA with offset 0x678
+    let pa = 0x4444_5000usize; // Page-aligned PA
 
     // Map the page
-    map_page(&mut root, va & !0xFFF, pa, PageFlags::KERNEL_DATA)
-        .expect("Mapping should succeed");
+    map_page(&mut root, va & !0xFFF, pa, PageFlags::KERNEL_DATA).expect("Mapping should succeed");
 
     // Translate should return PA + offset
     let result = translate(&root, va);

@@ -39,7 +39,10 @@ pub fn sys_utimensat(dirfd: i32, pathname: usize, times: usize, _flags: u32) -> 
         for i in 0..4 {
             let mut val = 0u64;
             for j in 0..8 {
-                if let Some(ptr) = mm_user::user_va_to_kernel_ptr(task.ttbr0.load(Ordering::Acquire), times + i * 8 + j) {
+                if let Some(ptr) = mm_user::user_va_to_kernel_ptr(
+                    task.ttbr0.load(Ordering::Acquire),
+                    times + i * 8 + j,
+                ) {
                     val |= (unsafe { *ptr } as u64) << (j * 8);
                 } else {
                     return Err(EFAULT);
@@ -86,11 +89,19 @@ pub fn sys_linkat(
 
     // TEAM_418: Use PATH_MAX from SSOT
     let mut old_path_buf = [0u8; linux_raw_sys::general::PATH_MAX as usize];
-    let old_path_str = read_user_cstring(task.ttbr0.load(Ordering::Acquire), oldpath, &mut old_path_buf)?;
+    let old_path_str = read_user_cstring(
+        task.ttbr0.load(Ordering::Acquire),
+        oldpath,
+        &mut old_path_buf,
+    )?;
 
     // TEAM_418: Use PATH_MAX from SSOT
     let mut new_path_buf = [0u8; linux_raw_sys::general::PATH_MAX as usize];
-    let new_path_str = read_user_cstring(task.ttbr0.load(Ordering::Acquire), newpath, &mut new_path_buf)?;
+    let new_path_str = read_user_cstring(
+        task.ttbr0.load(Ordering::Acquire),
+        newpath,
+        &mut new_path_buf,
+    )?;
 
     // TEAM_345: Handle dirfd
     if (olddirfd != AT_FDCWD && !old_path_str.starts_with('/'))
@@ -115,11 +126,16 @@ pub fn sys_symlinkat(target: usize, newdirfd: i32, linkpath: usize) -> SyscallRe
 
     // TEAM_418: Use PATH_MAX from SSOT
     let mut target_buf = [0u8; linux_raw_sys::general::PATH_MAX as usize];
-    let target_str = read_user_cstring(task.ttbr0.load(Ordering::Acquire), target, &mut target_buf)?;
+    let target_str =
+        read_user_cstring(task.ttbr0.load(Ordering::Acquire), target, &mut target_buf)?;
 
     // TEAM_418: Use PATH_MAX from SSOT
     let mut linkpath_buf = [0u8; linux_raw_sys::general::PATH_MAX as usize];
-    let linkpath_str = read_user_cstring(task.ttbr0.load(Ordering::Acquire), linkpath, &mut linkpath_buf)?;
+    let linkpath_str = read_user_cstring(
+        task.ttbr0.load(Ordering::Acquire),
+        linkpath,
+        &mut linkpath_buf,
+    )?;
 
     // TEAM_466: Resolve relative paths against CWD for AT_FDCWD
     let resolved_linkpath = if newdirfd == AT_FDCWD && !linkpath_str.starts_with('/') {

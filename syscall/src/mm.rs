@@ -4,13 +4,13 @@
 //! TEAM_420: Direct linux_raw_sys imports, no shims
 //! TEAM_421: Return SyscallResult, no scattered casts
 
-use core::sync::atomic::Ordering;
 use crate::SyscallResult;
+use core::sync::atomic::Ordering;
 use linux_raw_sys::errno::{EINVAL, ENOMEM, ENOSYS};
 use linux_raw_sys::general::{MAP_ANONYMOUS, MAP_FIXED, PROT_EXEC, PROT_READ, PROT_WRITE};
 // TEAM_462: Import page alignment helpers from central constants module
 use los_hal::mmu::{
-    self, is_page_aligned, page_align_up, PAGE_SIZE, PageAllocator, PageFlags, PageTable,
+    self, PAGE_SIZE, PageAllocator, PageFlags, PageTable, is_page_aligned, page_align_up,
     phys_to_virt, tlb_flush_page,
 };
 use los_mm::FRAME_ALLOCATOR;
@@ -125,8 +125,12 @@ pub fn sys_sbrk(increment: isize) -> SyscallResult {
 
                 for page in old_page..new_page {
                     let va = page * los_hal::mmu::PAGE_SIZE;
-                    if mm_user::user_va_to_kernel_ptr(task.ttbr0.load(Ordering::Acquire), va).is_none() {
-                        if mm_user::alloc_and_map_heap_page(task.ttbr0.load(Ordering::Acquire), va).is_err() {
+                    if mm_user::user_va_to_kernel_ptr(task.ttbr0.load(Ordering::Acquire), va)
+                        .is_none()
+                    {
+                        if mm_user::alloc_and_map_heap_page(task.ttbr0.load(Ordering::Acquire), va)
+                            .is_err()
+                        {
                             // TEAM_389: Log OOM for debugging (Rule 4: Silence is Golden - use debug level)
                             log::debug!("[OOM] sys_sbrk: failed to allocate page at VA 0x{:x}", va);
                             heap.current = old_break;
@@ -175,7 +179,10 @@ pub fn sys_mmap(
     // TEAM_456: Debug logging for mmap calls
     log::trace!(
         "[MMAP] Request: addr=0x{:x} len=0x{:x} prot=0x{:x} flags=0x{:x}",
-        addr, len, prot, flags
+        addr,
+        len,
+        prot,
+        flags
     );
 
     // TEAM_228: Validate arguments

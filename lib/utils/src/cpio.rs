@@ -188,7 +188,7 @@ impl CpioEntryType {
     /// TEAM_464: Use linux-raw-sys constants as canonical source.
     #[must_use]
     pub fn from_mode(mode: u32) -> Self {
-        use linux_raw_sys::general::{S_IFMT, S_IFREG, S_IFDIR, S_IFLNK};
+        use linux_raw_sys::general::{S_IFDIR, S_IFLNK, S_IFMT, S_IFREG};
 
         match mode & S_IFMT {
             S_IFREG => Self::File,
@@ -503,7 +503,7 @@ mod tests {
     /// This tests real behavior using linux-raw-sys S_* constants.
     #[test]
     fn test_cpio_entry_type_from_mode() {
-        use linux_raw_sys::general::{S_IFREG, S_IFDIR, S_IFLNK, S_IFCHR, S_IFBLK, S_IFIFO};
+        use linux_raw_sys::general::{S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFREG};
 
         // Regular file: S_IFREG (0o100000) with permissions 0o644
         let mode_file = S_IFREG | 0o644;
@@ -515,7 +515,10 @@ mod tests {
 
         // Symbolic link: S_IFLNK (0o120000) with permissions 0o777
         let mode_symlink = S_IFLNK | 0o777;
-        assert_eq!(CpioEntryType::from_mode(mode_symlink), CpioEntryType::Symlink);
+        assert_eq!(
+            CpioEntryType::from_mode(mode_symlink),
+            CpioEntryType::Symlink
+        );
 
         // Character device: S_IFCHR (0o020000) -> Other
         let mode_chr = S_IFCHR | 0o666;
@@ -534,7 +537,7 @@ mod tests {
     /// Verifies linux-raw-sys S_IFMT constant extracts file type correctly.
     #[test]
     fn test_mode_masking_with_ifmt() {
-        use linux_raw_sys::general::{S_IFMT, S_IFREG, S_IFDIR};
+        use linux_raw_sys::general::{S_IFDIR, S_IFMT, S_IFREG};
 
         // Regular file with various permissions should still be detected as file
         let permissions = [0o000, 0o644, 0o755, 0o777, 0o400];

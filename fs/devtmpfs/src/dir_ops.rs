@@ -13,8 +13,8 @@ use los_vfs::inode::Inode;
 use los_vfs::mode;
 use los_vfs::ops::{DirEntry, InodeOps};
 
-use crate::node::{DevtmpfsNode, DevtmpfsNodeType};
 use crate::DEVTMPFS;
+use crate::node::{DevtmpfsNode, DevtmpfsNodeType};
 
 /// TEAM_431: Devtmpfs Directory Operations
 pub struct DevtmpfsDirOps;

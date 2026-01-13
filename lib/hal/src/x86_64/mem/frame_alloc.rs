@@ -61,5 +61,6 @@ impl PageAllocator for EarlyFrameAllocator {
 // CAUTION: The EARLY_ALLOCATOR range must exactly match the reservation in
 // kernel memory initialization to avoid physical memory corruption.
 // TEAM_464: Use named constants from mem::constants SSOT.
-use crate::mem::constants::{EARLY_ALLOC_START, EARLY_ALLOC_END};
-pub static EARLY_ALLOCATOR: EarlyFrameAllocator = EarlyFrameAllocator::new(EARLY_ALLOC_START, EARLY_ALLOC_END);
+use crate::mem::constants::{EARLY_ALLOC_END, EARLY_ALLOC_START};
+pub static EARLY_ALLOCATOR: EarlyFrameAllocator =
+    EarlyFrameAllocator::new(EARLY_ALLOC_START, EARLY_ALLOC_END);

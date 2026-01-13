@@ -4,7 +4,7 @@
 
 use crate::FRAME_ALLOCATOR;
 use los_hal::mmu::{
-    self, page_align_down, page_align_up, MmuError, PAGE_MASK, PAGE_SIZE, PageFlags, PageTable,
+    self, MmuError, PAGE_MASK, PAGE_SIZE, PageFlags, PageTable, page_align_down, page_align_up,
 };
 use los_hal::traits::PageAllocator;
 
@@ -318,11 +318,11 @@ mod tests {
 
         let test_cases = [
             // (va_start, len, expected_pages)
-            (0x1000, 0x1000, 1),      // Aligned, 1 page
-            (0x1000, 0x2000, 2),      // Aligned, 2 pages
-            (0x1234, 0x1000, 2),      // Unaligned start: 0x1000 to 0x3000
-            (0x1000, 0x1, 1),         // 1 byte = 1 page
-            (0x1FFF, 0x2, 2),         // 2 bytes crossing page boundary
+            (0x1000, 0x1000, 1), // Aligned, 1 page
+            (0x1000, 0x2000, 2), // Aligned, 2 pages
+            (0x1234, 0x1000, 2), // Unaligned start: 0x1000 to 0x3000
+            (0x1000, 0x1, 1),    // 1 byte = 1 page
+            (0x1FFF, 0x2, 2),    // 2 bytes crossing page boundary
         ];
 
         for (va_start, len, expected_pages) in test_cases {
@@ -341,7 +341,7 @@ mod tests {
     fn test_user_va_to_kernel_ptr_alignment() {
         // Test that page offset extraction works correctly
         let test_addrs = [
-            (0x1234, 0x1000, 0x234),  // (addr, expected_page, expected_offset)
+            (0x1234, 0x1000, 0x234), // (addr, expected_page, expected_offset)
             (0x1000, 0x1000, 0x000),
             (0x1FFF, 0x1000, 0xFFF),
             (0x12345678, 0x12345000, 0x678),
@@ -361,7 +361,7 @@ mod tests {
         // The function iterates: current = page_align_down(ptr), then current += PAGE_SIZE
 
         let ptr = 0x1234;
-        let len = 0x3000;  // Spans ~4 pages (0x1000 to 0x5000 due to offset)
+        let len = 0x3000; // Spans ~4 pages (0x1000 to 0x5000 due to offset)
 
         // Simulate the iteration logic
         let mut current = ptr;
@@ -385,11 +385,11 @@ mod tests {
 
         let test_cases = [
             // (va_start, len, expected_pages)
-            (0x1000, 0x1000, 1),      // Aligned, exactly 1 page
-            (0x1000, 0x1001, 2),      // Aligned, 1 byte over
-            (0x1234, 0x1000, 2),      // 0x234 offset + 0x1000 len = needs 2 pages
-            (0x1001, 0xFFF, 1),       // 1 byte offset + 0xFFF len = fits in 1 page
-            (0x1001, 0x1000, 2),      // 1 byte offset + 0x1000 len = needs 2 pages
+            (0x1000, 0x1000, 1), // Aligned, exactly 1 page
+            (0x1000, 0x1001, 2), // Aligned, 1 byte over
+            (0x1234, 0x1000, 2), // 0x234 offset + 0x1000 len = needs 2 pages
+            (0x1001, 0xFFF, 1),  // 1 byte offset + 0xFFF len = fits in 1 page
+            (0x1001, 0x1000, 2), // 1 byte offset + 0x1000 len = needs 2 pages
         ];
 
         for (va_start, len, expected_pages) in test_cases {

@@ -21,12 +21,24 @@ pub use identity::{
     sys_uname,
 };
 pub use lifecycle::{
-    sys_exec, sys_execve, sys_exit, sys_exit_group, sys_get_foreground, sys_getpid, sys_getppid,
-    sys_set_foreground, sys_spawn, sys_spawn_args, sys_waitpid, sys_yield,
     // TEAM_429: Hooks for kernel integration
     // TEAM_436: Added PREPARE_EXEC_IMAGE_HOOK for execve
-    PREPARE_EXEC_IMAGE_HOOK, RESOLVE_EXECUTABLE_HOOK, SPAWN_FROM_ELF_HOOK,
+    PREPARE_EXEC_IMAGE_HOOK,
+    RESOLVE_EXECUTABLE_HOOK,
+    SPAWN_FROM_ELF_HOOK,
     SPAWN_FROM_ELF_WITH_ARGS_HOOK,
+    sys_exec,
+    sys_execve,
+    sys_exit,
+    sys_exit_group,
+    sys_get_foreground,
+    sys_getpid,
+    sys_getppid,
+    sys_set_foreground,
+    sys_spawn,
+    sys_spawn_args,
+    sys_waitpid,
+    sys_yield,
 };
 pub use resources::{sys_getrusage, sys_prlimit64};
 pub use sched::{sys_sched_getaffinity, sys_sched_setaffinity};

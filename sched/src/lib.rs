@@ -46,7 +46,9 @@ pub extern "C" fn task_exit() -> ! {
         // SAFETY: user_va_to_kernel_ptr verified the address is mapped
         // and belongs to this task's address space (shared via CLONE_VM).
         // TEAM_456: Use .load() since ttbr0 is now AtomicUsize
-        if let Some(ptr) = los_mm::user::user_va_to_kernel_ptr(task.ttbr0.load(Ordering::Acquire), clear_tid) {
+        if let Some(ptr) =
+            los_mm::user::user_va_to_kernel_ptr(task.ttbr0.load(Ordering::Acquire), clear_tid)
+        {
             unsafe {
                 *(ptr as *mut i32) = 0;
             }
@@ -65,11 +67,13 @@ pub extern "C" fn task_exit() -> ! {
 
     // TEAM_071: Mark task as exited (Design Q2)
     task.set_state(TaskState::Exited);
-    log::trace!("[TASK_EXIT] PID {} marked Exited, calling schedule()", task.id.0);
+    log::trace!(
+        "[TASK_EXIT] PID {} marked Exited, calling schedule()",
+        task.id.0
+    );
 
     // Yield to next task without re-adding self to ready queue
     scheduler::SCHEDULER.schedule();
-
 
     // If we return here, no other tasks are ready - enter idle
     loop {
@@ -161,7 +165,6 @@ pub fn switch_to(new_task: Arc<TaskControlBlock>) {
         return; // [MT4] no-op for same task
     }
 
-
     unsafe {
         // SAFETY: We cast to mut pointers for the assembly.
         // During switch, interrupts are disabled (usually) so this is safe.
@@ -207,7 +210,7 @@ pub fn switch_to(new_task: Arc<TaskControlBlock>) {
                 );
                 // TEAM_454: Dump raw bytes at offsets 56 (rcx) and 120 (rsp) to verify
                 let raw = ctx.rsp as *const u64;
-                let rcx_raw = *raw.add(7);  // offset 56 = index 7
+                let rcx_raw = *raw.add(7); // offset 56 = index 7
                 let rsp_raw = *raw.add(15); // offset 120 = index 15
                 log::trace!(
                     "[SWITCH] Raw at offset 56: 0x{:x}, at offset 120: 0x{:x}",
@@ -512,7 +515,11 @@ pub fn user_task_entry_wrapper() -> ! {
         }
 
         // Enter EL0 (AArch64) or Ring 3 (x86_64)
-        log::info!("[TASK] Calling enter_user_mode(0x{:x}, 0x{:x})", task.user_entry, task.user_sp);
+        log::info!(
+            "[TASK] Calling enter_user_mode(0x{:x}, 0x{:x})",
+            task.user_entry,
+            task.user_sp
+        );
         crate::user::enter_user_mode(task.user_entry, task.user_sp);
     }
 }

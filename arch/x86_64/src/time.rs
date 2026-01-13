@@ -34,8 +34,7 @@ pub fn read_timer_frequency() -> u64 {
     }
 
     // Try CPUID leaf 0x15 first (Intel Skylake+, AMD Zen+)
-    let freq = detect_tsc_frequency_cpuid()
-        .unwrap_or_else(|| detect_tsc_frequency_pit());
+    let freq = detect_tsc_frequency_cpuid().unwrap_or_else(|| detect_tsc_frequency_pit());
 
     TSC_FREQUENCY.store(freq, Ordering::Relaxed);
     freq
@@ -51,7 +50,7 @@ fn detect_tsc_frequency_cpuid() -> Option<u64> {
 
     let result = cpuid(0x15);
     let denominator = result.eax as u64; // TSC/core crystal clock ratio denominator
-    let numerator = result.ebx as u64;   // TSC/core crystal clock ratio numerator
+    let numerator = result.ebx as u64; // TSC/core crystal clock ratio numerator
     let crystal_freq = result.ecx as u64; // Core crystal clock frequency in Hz
 
     if denominator == 0 || numerator == 0 {

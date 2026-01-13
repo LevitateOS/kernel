@@ -123,11 +123,7 @@ mod aarch64_handlers {
                     return; // Ignore
                 }
                 // Terminate process for other signals
-                log::debug!(
-                    "[SIGNAL] PID={} terminated by signal {}",
-                    task.id.0,
-                    sig
-                );
+                log::debug!("[SIGNAL] PID={} terminated by signal {}", task.id.0, sig);
                 los_sched::task_exit();
             }
             1 => {
@@ -182,7 +178,9 @@ mod aarch64_handlers {
             frame.pc = handler as u64;
             frame.regs[0] = sig as u64;
             // Set LR (x30) to signal trampoline for sigreturn
-            let trampoline = task.signal_trampoline.load(core::sync::atomic::Ordering::Acquire);
+            let trampoline = task
+                .signal_trampoline
+                .load(core::sync::atomic::Ordering::Acquire);
             if trampoline != 0 {
                 frame.regs[30] = trampoline as u64;
             }

@@ -12,7 +12,7 @@ use crate::loader::elf::{Elf, ElfError};
 use crate::task::fd_table::SharedFdTable;
 use crate::task::user::UserTask;
 use los_error::define_kernel_error;
-use los_hal::mmu::{page_align_down, MmuError, PAGE_SIZE};
+use los_hal::mmu::{MmuError, PAGE_SIZE, page_align_down};
 use los_mm::user::{
     AT_BASE, AT_ENTRY, AT_PHDR, AT_PHENT, AT_PHNUM, AuxEntry, create_user_page_table,
     setup_stack_args, setup_user_stack, setup_user_tls,
@@ -127,7 +127,11 @@ pub fn spawn_from_elf(elf_data: &[u8], fd_table: SharedFdTable) -> Result<UserTa
     // Add stack VMA (stack grows down, so stack_top is the high address)
     let stack_size = USER_STACK_PAGES * PAGE_SIZE;
     let stack_bottom = stack_top - stack_size;
-    let _ = vmas.insert(Vma::new(stack_bottom, stack_top, VmaFlags::READ | VmaFlags::WRITE));
+    let _ = vmas.insert(Vma::new(
+        stack_bottom,
+        stack_top,
+        VmaFlags::READ | VmaFlags::WRITE,
+    ));
 
     // Add TLS VMA (pages allocated by setup_user_tls at TLS_BASE_ADDR)
     // TLS_BASE_ADDR is 0x100000000000 (from los_mm::user)
@@ -136,7 +140,11 @@ pub fn spawn_from_elf(elf_data: &[u8], fd_table: SharedFdTable) -> Result<UserTa
     // TEAM_462: Use helper function for page alignment
     let tls_start = page_align_down(tls_base);
     let tls_end = tls_start + TLS_PAGES * PAGE_SIZE;
-    let _ = vmas.insert(Vma::new(tls_start, tls_end, VmaFlags::READ | VmaFlags::WRITE));
+    let _ = vmas.insert(Vma::new(
+        tls_start,
+        tls_end,
+        VmaFlags::READ | VmaFlags::WRITE,
+    ));
 
     // 8. Create UserTask with VMA list
     let user_task = UserTask::new(
@@ -233,7 +241,11 @@ pub fn prepare_exec_image(
     // Add stack VMA
     let stack_size = USER_STACK_PAGES * PAGE_SIZE;
     let stack_bottom = stack_top - stack_size;
-    let _ = vmas.insert(Vma::new(stack_bottom, stack_top, VmaFlags::READ | VmaFlags::WRITE));
+    let _ = vmas.insert(Vma::new(
+        stack_bottom,
+        stack_top,
+        VmaFlags::READ | VmaFlags::WRITE,
+    ));
 
     // Add TLS VMA
     // TEAM_456: Increased from 3 to 8 pages - busybox needs TLS up to 0x100000004000+
@@ -241,7 +253,11 @@ pub fn prepare_exec_image(
     // TEAM_462: Use helper function for page alignment
     let tls_start = page_align_down(tls_base);
     let tls_end = tls_start + TLS_PAGES * PAGE_SIZE;
-    let _ = vmas.insert(Vma::new(tls_start, tls_end, VmaFlags::READ | VmaFlags::WRITE));
+    let _ = vmas.insert(Vma::new(
+        tls_start,
+        tls_end,
+        VmaFlags::READ | VmaFlags::WRITE,
+    ));
 
     log::trace!(
         "[EXEC] Prepared image: entry=0x{:x} sp=0x{:x} brk=0x{:x} tls=0x{:x}",

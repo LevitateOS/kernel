@@ -15,16 +15,31 @@ use bitflags::bitflags;
 // TEAM_464: Re-export S_* constants from linux-raw-sys as canonical source
 
 pub use linux_raw_sys::general::{
+    S_IFBLK,
+    S_IFCHR,
+    S_IFDIR,
+    S_IFIFO,
+    S_IFLNK,
     // File type mask and types
-    S_IFMT, S_IFREG, S_IFDIR, S_IFCHR, S_IFBLK, S_IFIFO, S_IFLNK, S_IFSOCK,
-    // Special bits
-    S_ISUID, S_ISGID, S_ISVTX,
-    // Owner permissions
-    S_IRUSR, S_IWUSR, S_IXUSR,
+    S_IFMT,
+    S_IFREG,
+    S_IFSOCK,
     // Group permissions
-    S_IRGRP, S_IWGRP, S_IXGRP,
+    S_IRGRP,
     // Others permissions
-    S_IROTH, S_IWOTH, S_IXOTH,
+    S_IROTH,
+    // Owner permissions
+    S_IRUSR,
+    S_ISGID,
+    // Special bits
+    S_ISUID,
+    S_ISVTX,
+    S_IWGRP,
+    S_IWOTH,
+    S_IWUSR,
+    S_IXGRP,
+    S_IXOTH,
+    S_IXUSR,
 };
 
 // ============================================================================

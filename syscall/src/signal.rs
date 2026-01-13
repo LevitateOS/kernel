@@ -10,9 +10,8 @@ use core::sync::atomic::Ordering;
 use linux_raw_sys::errno::{EFAULT, EINTR, EINVAL, ENOENT, ESRCH};
 // TEAM_464: Import signal constants from linux-raw-sys (u32)
 use linux_raw_sys::general::{
-    SIGINT, SIGKILL, SIGCHLD, SIGCONT,
-    SA_SIGINFO, SA_RESTART, SA_NODEFER,
-    SIG_BLOCK, SIG_UNBLOCK, SIG_SETMASK,
+    SA_NODEFER, SA_RESTART, SA_SIGINFO, SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK, SIGCHLD, SIGCONT,
+    SIGINT, SIGKILL,
 };
 use los_sched::{TaskState, current_task, scheduler};
 
@@ -34,10 +33,10 @@ mod sigaction_arch {
     #[repr(C)]
     #[derive(Clone, Copy)]
     pub struct KernelSigaction {
-        pub sa_handler: usize,   // offset 0: handler or SIG_IGN/SIG_DFL
-        pub sa_flags: u64,       // offset 8: flags
-        pub sa_restorer: usize,  // offset 16: signal trampoline (x86_64 only)
-        pub sa_mask: u64,        // offset 24: 64-bit signal mask
+        pub sa_handler: usize,  // offset 0: handler or SIG_IGN/SIG_DFL
+        pub sa_flags: u64,      // offset 8: flags
+        pub sa_restorer: usize, // offset 16: signal trampoline (x86_64 only)
+        pub sa_mask: u64,       // offset 24: 64-bit signal mask
     }
 
     pub const SA_RESTORER: u64 = 0x04000000;
@@ -51,9 +50,9 @@ mod sigaction_arch {
     #[repr(C)]
     #[derive(Clone, Copy)]
     pub struct KernelSigaction {
-        pub sa_handler: usize,   // offset 0: handler or SIG_IGN/SIG_DFL
-        pub sa_flags: u64,       // offset 8: flags
-        pub sa_mask: u64,        // offset 16: 64-bit signal mask
+        pub sa_handler: usize, // offset 0: handler or SIG_IGN/SIG_DFL
+        pub sa_flags: u64,     // offset 8: flags
+        pub sa_mask: u64,      // offset 16: 64-bit signal mask
     }
 
     // aarch64 does not use SA_RESTORER - kernel provides signal trampoline

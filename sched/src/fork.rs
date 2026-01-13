@@ -59,26 +59,26 @@ pub fn create_fork(tf: &SyscallFrame) -> Result<Arc<TaskControlBlock>, ForkError
     #[cfg(target_arch = "x86_64")]
     log::trace!(
         "[FORK] Parent frame: rcx=0x{:x}, rsp=0x{:x}, rax=0x{:x}",
-        tf.rcx, tf.rsp, tf.rax
+        tf.rcx,
+        tf.rsp,
+        tf.rax
     );
     #[cfg(target_arch = "aarch64")]
-    log::trace!(
-        "[FORK] Parent frame: pc=0x{:x}, sp=0x{:x}",
-        tf.pc, tf.sp
-    );
+    log::trace!("[FORK] Parent frame: pc=0x{:x}, sp=0x{:x}", tf.pc, tf.sp);
 
     // 1. Clone VMA list from parent (needed for address space copy)
     let parent_vmas = (*parent.vmas.lock()).clone();
 
     // 2. Copy the entire address space (creates new page table with copied pages)
     // TEAM_456: Use .load() since ttbr0 is now AtomicUsize
-    let child_ttbr0 = los_mm::user::copy_user_address_space(
-        parent.ttbr0.load(Ordering::Acquire),
-        &parent_vmas,
-    )
-    .ok_or(ForkError::AddressSpaceCopyFailed)?;
+    let child_ttbr0 =
+        los_mm::user::copy_user_address_space(parent.ttbr0.load(Ordering::Acquire), &parent_vmas)
+            .ok_or(ForkError::AddressSpaceCopyFailed)?;
 
-    log::trace!("[FORK] Copied address space, child_ttbr0=0x{:x}", child_ttbr0);
+    log::trace!(
+        "[FORK] Copied address space, child_ttbr0=0x{:x}",
+        child_ttbr0
+    );
 
     // 3. Allocate kernel stack for the child (16KB, same as threads)
     let kernel_stack_size = 16384;

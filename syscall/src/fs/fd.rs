@@ -24,16 +24,26 @@ use linux_raw_sys::errno::{
 };
 // TEAM_464: Import constants from linux-raw-sys (canonical source)
 use linux_raw_sys::general::{
-    // TEAM_404: lseek whence constants (u32)
-    SEEK_SET, SEEK_CUR, SEEK_END,
+    F_ADD_SEALS,
     // TEAM_394: fcntl commands (u32)
-    F_DUPFD, F_GETFD, F_SETFD, F_GETFL, F_SETFL, F_DUPFD_CLOEXEC,
-    F_SETPIPE_SZ, F_GETPIPE_SZ, F_ADD_SEALS, F_GET_SEALS,
+    F_DUPFD,
+    F_DUPFD_CLOEXEC,
+    F_GET_SEALS,
+    F_GETFD,
+    F_GETFL,
+    F_GETPIPE_SZ,
+    F_SETFD,
+    F_SETFL,
+    F_SETPIPE_SZ,
     // TEAM_464: O_RDWR for F_GETFL return value
     O_RDWR,
+    SEEK_CUR,
+    SEEK_END,
+    // TEAM_404: lseek whence constants (u32)
+    SEEK_SET,
 };
 // TEAM_464: Import ioctl constants from linux-raw-sys (u32)
-use linux_raw_sys::ioctl::{TIOCGPGRP, TIOCSPGRP, TIOCSCTTY};
+use linux_raw_sys::ioctl::{TIOCGPGRP, TIOCSCTTY, TIOCSPGRP};
 use los_sched::current_task;
 use los_sched::fd_table::FdType;
 
@@ -175,7 +185,9 @@ pub fn sys_pipe2(pipefd_ptr: usize, _flags: u32) -> SyscallResult {
     let task = current_task();
 
     // Validate user buffer (2 * sizeof(i32) = 8 bytes)
-    if mm_user::validate_user_buffer(task.ttbr0.load(Ordering::Acquire), pipefd_ptr, 8, true).is_err() {
+    if mm_user::validate_user_buffer(task.ttbr0.load(Ordering::Acquire), pipefd_ptr, 8, true)
+        .is_err()
+    {
         return Err(EFAULT);
     }
 
@@ -250,7 +262,7 @@ pub fn sys_ioctl(fd: usize, request: u32, arg: usize) -> SyscallResult {
     // TEAM_464: Use ioctl constants from linux-raw-sys (u32)
     // TEAM_447: Added TIOCSWINSZ for setting terminal window size
     use linux_raw_sys::ioctl::{
-        TCGETS, TCSETS, TCSETSF, TCSETSW, TIOCGPTN, TIOCSPTLCK, TIOCGWINSZ, TIOCSWINSZ,
+        TCGETS, TCSETS, TCSETSF, TCSETSW, TIOCGPTN, TIOCGWINSZ, TIOCSPTLCK, TIOCSWINSZ,
     };
     use los_fs_tty::CONSOLE_TTY;
 
@@ -265,13 +277,15 @@ pub fn sys_ioctl(fd: usize, request: u32, arg: usize) -> SyscallResult {
                 let termios = CONSOLE_TTY.lock().termios;
                 ioctl_get_termios(task.ttbr0.load(Ordering::Acquire), arg, &termios)
             }
-            TCSETS | TCSETSW | TCSETSF => match ioctl_read_termios(task.ttbr0.load(Ordering::Acquire), arg) {
-                Ok(new_termios) => {
-                    CONSOLE_TTY.lock().termios = new_termios;
-                    Ok(0)
+            TCSETS | TCSETSW | TCSETSF => {
+                match ioctl_read_termios(task.ttbr0.load(Ordering::Acquire), arg) {
+                    Ok(new_termios) => {
+                        CONSOLE_TTY.lock().termios = new_termios;
+                        Ok(0)
+                    }
+                    Err(e) => Err(e),
                 }
-                Err(e) => Err(e),
-            },
+            }
             TIOCGPGRP => {
                 let fg_pgid = *los_sched::FOREGROUND_PID.lock();
                 log::trace!("[SYSCALL] TIOCGPGRP -> {}", fg_pgid);
@@ -302,11 +316,15 @@ pub fn sys_ioctl(fd: usize, request: u32, arg: usize) -> SyscallResult {
                 // Return a reasonable default terminal size (80x24)
                 // struct winsize { unsigned short ws_row, ws_col, ws_xpixel, ws_ypixel; }
                 let winsize: [u16; 4] = [24, 80, 0, 0]; // rows, cols, xpixel, ypixel
-                let bytes = unsafe {
-                    core::slice::from_raw_parts(winsize.as_ptr() as *const u8, 8)
-                };
+                let bytes =
+                    unsafe { core::slice::from_raw_parts(winsize.as_ptr() as *const u8, 8) };
                 for i in 0..8 {
-                    if !crate::write_to_user_buf(task.ttbr0.load(Ordering::Acquire), arg, i, bytes[i]) {
+                    if !crate::write_to_user_buf(
+                        task.ttbr0.load(Ordering::Acquire),
+                        arg,
+                        i,
+                        bytes[i],
+                    ) {
                         return Err(EFAULT);
                     }
                 }
@@ -319,7 +337,9 @@ pub fn sys_ioctl(fd: usize, request: u32, arg: usize) -> SyscallResult {
                 // we have a fixed terminal size. This makes programs happy.
                 let mut bytes = [0u8; 8];
                 for i in 0..8 {
-                    if let Some(b) = crate::read_from_user(task.ttbr0.load(Ordering::Acquire), arg + i) {
+                    if let Some(b) =
+                        crate::read_from_user(task.ttbr0.load(Ordering::Acquire), arg + i)
+                    {
                         bytes[i] = b;
                     } else {
                         return Err(EFAULT);
@@ -338,7 +358,9 @@ pub fn sys_ioctl(fd: usize, request: u32, arg: usize) -> SyscallResult {
                 None => return Err(EINVAL),
             };
             match request {
-                TIOCGPTN => ioctl_write_u32(task.ttbr0.load(Ordering::Acquire), arg, pair.id as u32),
+                TIOCGPTN => {
+                    ioctl_write_u32(task.ttbr0.load(Ordering::Acquire), arg, pair.id as u32)
+                }
                 TIOCSPTLCK => match ioctl_read_u32(task.ttbr0.load(Ordering::Acquire), arg) {
                     Ok(val) => {
                         *pair.locked.lock() = val != 0;
@@ -360,13 +382,15 @@ pub fn sys_ioctl(fd: usize, request: u32, arg: usize) -> SyscallResult {
                     let termios = pair.tty.lock().termios;
                     ioctl_get_termios(task.ttbr0.load(Ordering::Acquire), arg, &termios)
                 }
-                TCSETS | TCSETSW | TCSETSF => match ioctl_read_termios(task.ttbr0.load(Ordering::Acquire), arg) {
-                    Ok(new_termios) => {
-                        pair.tty.lock().termios = new_termios;
-                        Ok(0)
+                TCSETS | TCSETSW | TCSETSF => {
+                    match ioctl_read_termios(task.ttbr0.load(Ordering::Acquire), arg) {
+                        Ok(new_termios) => {
+                            pair.tty.lock().termios = new_termios;
+                            Ok(0)
+                        }
+                        Err(e) => Err(e),
                     }
-                    Err(e) => Err(e),
-                },
+                }
                 _ => Err(EINVAL),
             }
         }
@@ -438,7 +462,8 @@ pub fn sys_chdir(path_ptr: usize) -> SyscallResult {
     // TEAM_418: Use PATH_MAX from SSOT
     let mut path_buf = [0u8; linux_raw_sys::general::PATH_MAX as usize];
 
-    let path = crate::read_user_cstring(task.ttbr0.load(Ordering::Acquire), path_ptr, &mut path_buf)?;
+    let path =
+        crate::read_user_cstring(task.ttbr0.load(Ordering::Acquire), path_ptr, &mut path_buf)?;
 
     // TEAM_466: Resolve relative paths against current cwd first
     let absolute_path = if path.starts_with('/') {
@@ -625,7 +650,14 @@ pub fn sys_pread64(fd: usize, buf_ptr: usize, count: usize, offset: i64) -> Sysc
             }
 
             // Validate user buffer
-            if mm_user::validate_user_buffer(task.ttbr0.load(Ordering::Acquire), buf_ptr, count, true).is_err() {
+            if mm_user::validate_user_buffer(
+                task.ttbr0.load(Ordering::Acquire),
+                buf_ptr,
+                count,
+                true,
+            )
+            .is_err()
+            {
                 return Err(EFAULT);
             }
 
@@ -635,7 +667,10 @@ pub fn sys_pread64(fd: usize, buf_ptr: usize, count: usize, offset: i64) -> Sysc
                 Ok(n) => {
                     // Copy to user space
                     // TEAM_416: Replace unwrap() with proper error handling for panic safety
-                    let dest = match mm_user::user_va_to_kernel_ptr(task.ttbr0.load(Ordering::Acquire), buf_ptr) {
+                    let dest = match mm_user::user_va_to_kernel_ptr(
+                        task.ttbr0.load(Ordering::Acquire),
+                        buf_ptr,
+                    ) {
                         Some(p) => p,
                         None => return Err(EFAULT),
                     };
@@ -695,17 +730,25 @@ pub fn sys_pwrite64(fd: usize, buf_ptr: usize, count: usize, offset: i64) -> Sys
             }
 
             // Validate user buffer
-            if mm_user::validate_user_buffer(task.ttbr0.load(Ordering::Acquire), buf_ptr, count, false).is_err() {
+            if mm_user::validate_user_buffer(
+                task.ttbr0.load(Ordering::Acquire),
+                buf_ptr,
+                count,
+                false,
+            )
+            .is_err()
+            {
                 return Err(EFAULT);
             }
 
             // Copy from user space
             let mut kbuf = alloc::vec![0u8; count];
             // TEAM_416: Replace unwrap() with proper error handling for panic safety
-            let src = match mm_user::user_va_to_kernel_ptr(task.ttbr0.load(Ordering::Acquire), buf_ptr) {
-                Some(p) => p,
-                None => return Err(EFAULT),
-            };
+            let src =
+                match mm_user::user_va_to_kernel_ptr(task.ttbr0.load(Ordering::Acquire), buf_ptr) {
+                    Some(p) => p,
+                    None => return Err(EFAULT),
+                };
             unsafe {
                 core::ptr::copy_nonoverlapping(src, kbuf.as_mut_ptr(), count);
             }

@@ -2,13 +2,13 @@
 // TEAM_421: Returns SyscallResult, no scattered casts
 // TEAM_464: Use linux-raw-sys constants as canonical source
 
-use core::sync::atomic::Ordering;
 use crate::SyscallResult;
+use core::sync::atomic::Ordering;
 use linux_raw_sys::errno::EFAULT;
 // TEAM_464: Import reboot command constants from linux-raw-sys (u32)
 use linux_raw_sys::general::{
-    LINUX_REBOOT_CMD_RESTART, LINUX_REBOOT_CMD_HALT, LINUX_REBOOT_CMD_CAD_ON,
-    LINUX_REBOOT_CMD_CAD_OFF, LINUX_REBOOT_CMD_POWER_OFF,
+    LINUX_REBOOT_CMD_CAD_OFF, LINUX_REBOOT_CMD_CAD_ON, LINUX_REBOOT_CMD_HALT,
+    LINUX_REBOOT_CMD_POWER_OFF, LINUX_REBOOT_CMD_RESTART,
 };
 use los_mm::user as mm_user;
 
@@ -39,13 +39,16 @@ pub fn sys_shutdown(cmd: u32) -> SyscallResult {
         }
         LINUX_REBOOT_CMD_RESTART | LINUX_REBOOT_CMD_HALT | LINUX_REBOOT_CMD_POWER_OFF => {
             // These actually mean shutdown
-            log::info!("[SHUTDOWN] Initiating graceful shutdown (cmd=0x{:x})...", cmd);
+            log::info!(
+                "[SHUTDOWN] Initiating graceful shutdown (cmd=0x{:x})...",
+                cmd
+            );
         }
         _ => {
             log::warn!("[REBOOT] Unknown cmd=0x{:x}, treating as shutdown", cmd);
         }
     }
-    
+
     let verbose = true;
     log::info!("[SHUTDOWN] Initiating graceful shutdown...");
 
@@ -140,7 +143,8 @@ pub fn sys_getrandom(buf: usize, buflen: usize, flags: u32) -> SyscallResult {
     let task = los_sched::current_task();
 
     // Validate user buffer
-    if mm_user::validate_user_buffer(task.ttbr0.load(Ordering::Acquire), buf, buflen, true).is_err() {
+    if mm_user::validate_user_buffer(task.ttbr0.load(Ordering::Acquire), buf, buflen, true).is_err()
+    {
         return Err(EFAULT);
     }
 

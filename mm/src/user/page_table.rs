@@ -8,7 +8,7 @@ use alloc::vec::Vec;
 use crate::FRAME_ALLOCATOR;
 use crate::vma::{VmaFlags, VmaList};
 use los_hal::mmu::{
-    self, page_align_down, ENTRIES_PER_TABLE, MmuError, PAGE_SIZE, PageFlags, PageTable,
+    self, ENTRIES_PER_TABLE, MmuError, PAGE_SIZE, PageFlags, PageTable, page_align_down,
 };
 use los_hal::traits::PageAllocator;
 

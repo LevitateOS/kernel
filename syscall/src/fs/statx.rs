@@ -3,8 +3,8 @@
 //!
 //! Extended file stat returning struct statx with additional fields.
 
-use core::sync::atomic::Ordering;
 use crate::SyscallResult;
+use core::sync::atomic::Ordering;
 use linux_raw_sys::errno::{EBADF, EFAULT, ENOENT};
 // TEAM_464: Import AT_EMPTY_PATH from linux-raw-sys (canonical source, u32)
 use linux_raw_sys::general::AT_EMPTY_PATH;
@@ -74,7 +74,14 @@ pub fn sys_statx(
     let statx_size = core::mem::size_of::<Statx>();
 
     // Validate output buffer
-    if mm_user::validate_user_buffer(task.ttbr0.load(Ordering::Acquire), statxbuf, statx_size, true).is_err() {
+    if mm_user::validate_user_buffer(
+        task.ttbr0.load(Ordering::Acquire),
+        statxbuf,
+        statx_size,
+        true,
+    )
+    .is_err()
+    {
         return Err(EFAULT);
     }
 
@@ -85,7 +92,8 @@ pub fn sys_statx(
 
     // Otherwise, resolve pathname
     let mut path_buf = [0u8; 256];
-    let path = crate::read_user_cstring(task.ttbr0.load(Ordering::Acquire), pathname, &mut path_buf)?;
+    let path =
+        crate::read_user_cstring(task.ttbr0.load(Ordering::Acquire), pathname, &mut path_buf)?;
 
     // Use existing VFS stat function
     use los_vfs::dispatch::vfs_stat;

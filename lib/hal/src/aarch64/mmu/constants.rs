@@ -4,8 +4,7 @@
 
 // TEAM_462: Import from central constants module
 pub use crate::mem::constants::{
-    is_page_aligned, page_align_down, page_align_up, pages_needed, PAGE_MASK, PAGE_SHIFT,
-    PAGE_SIZE,
+    PAGE_MASK, PAGE_SHIFT, PAGE_SIZE, is_page_aligned, page_align_down, page_align_up, pages_needed,
 };
 /// Entries per page table (512 for 4KB pages with 8-byte entries)
 pub const ENTRIES_PER_TABLE: usize = 512;

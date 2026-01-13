@@ -500,7 +500,12 @@ fn generate_stat(pid: u32) -> VfsResult<String> {
 
     Ok(alloc::format!(
         "{} (task{}) {} {} {} {} 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0\n",
-        pid, pid, state, ppid, pgrp, session
+        pid,
+        pid,
+        state,
+        ppid,
+        pgrp,
+        session
     ))
 }
 
@@ -561,7 +566,9 @@ fn generate_maps(pid: u32) -> VfsResult<String> {
 
         s.push_str(&alloc::format!(
             "{:08x}-{:08x} {} 00000000 00:00 0\n",
-            vma.start, vma.end, perms
+            vma.start,
+            vma.end,
+            perms
         ));
     }
 
@@ -577,7 +584,8 @@ fn generate_meminfo() -> String {
 
     alloc::format!(
         "MemTotal:       {} kB\nMemFree:        {} kB\nBuffers:        0 kB\nCached:         0 kB\n",
-        total_kb, free_kb
+        total_kb,
+        free_kb
     )
 }
 
@@ -638,7 +646,9 @@ fn process_exists(pid: u32) -> bool {
 /// Get task by PID
 fn get_task(pid: u32) -> Option<Arc<los_sched::TaskControlBlock>> {
     let table = los_sched::process_table::PROCESS_TABLE.lock();
-    table.get(&(pid as usize)).and_then(|entry| entry.task.clone())
+    table
+        .get(&(pid as usize))
+        .and_then(|entry| entry.task.clone())
 }
 
 /// Get all process IDs

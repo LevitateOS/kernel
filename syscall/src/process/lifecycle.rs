@@ -184,7 +184,12 @@ pub fn sys_spawn(path_ptr: usize, path_len: usize) -> SyscallResult {
 
     // Read path from user space
     let mut path_buf = [0u8; 256];
-    let path = crate::copy_user_string(task.ttbr0.load(Ordering::Acquire), path_ptr, path_len, &mut path_buf)?;
+    let path = crate::copy_user_string(
+        task.ttbr0.load(Ordering::Acquire),
+        path_ptr,
+        path_len,
+        &mut path_buf,
+    )?;
 
     log::trace!("[SYSCALL] spawn('{}')", path);
 
@@ -226,7 +231,12 @@ pub fn sys_exec(path_ptr: usize, path_len: usize) -> SyscallResult {
 
     // TEAM_226: Use safe copy through kernel pointers
     let mut path_buf = [0u8; 256];
-    let path = crate::copy_user_string(task.ttbr0.load(Ordering::Acquire), path_ptr, path_len, &mut path_buf)?;
+    let path = crate::copy_user_string(
+        task.ttbr0.load(Ordering::Acquire),
+        path_ptr,
+        path_len,
+        &mut path_buf,
+    )?;
 
     log::trace!("[SYSCALL] exec('{}')", path);
 
@@ -280,16 +290,33 @@ pub fn sys_execve(
     let task = los_sched::current_task();
 
     // 1. Read path (null-terminated C string)
-    let path = read_user_cstring(task.ttbr0.load(Ordering::Acquire), path_ptr, MAX_EXECVE_STRLEN)?;
-    log::trace!("[SYSCALL] execve('{}', argv={:#x}, envp={:#x})", path, argv_ptr, envp_ptr);
+    let path = read_user_cstring(
+        task.ttbr0.load(Ordering::Acquire),
+        path_ptr,
+        MAX_EXECVE_STRLEN,
+    )?;
+    log::trace!(
+        "[SYSCALL] execve('{}', argv={:#x}, envp={:#x})",
+        path,
+        argv_ptr,
+        envp_ptr
+    );
 
     // 2. Read argv array
-    let argv_strings = read_user_string_array(task.ttbr0.load(Ordering::Acquire), argv_ptr, MAX_EXECVE_ARGC)?;
+    let argv_strings = read_user_string_array(
+        task.ttbr0.load(Ordering::Acquire),
+        argv_ptr,
+        MAX_EXECVE_ARGC,
+    )?;
     let argv_refs: alloc::vec::Vec<&str> = argv_strings.iter().map(|s| s.as_str()).collect();
 
     // 3. Read envp array (can be NULL)
     let envp_strings = if envp_ptr != 0 {
-        read_user_string_array(task.ttbr0.load(Ordering::Acquire), envp_ptr, MAX_EXECVE_ENVC)?
+        read_user_string_array(
+            task.ttbr0.load(Ordering::Acquire),
+            envp_ptr,
+            MAX_EXECVE_ENVC,
+        )?
     } else {
         alloc::vec::Vec::new()
     };
@@ -317,7 +344,8 @@ fn execve_internal(
     }
 
     // Define the hook type matching the kernel's function signature
-    type PrepareExecHook = fn(&[u8], &[&str], &[&str]) -> Result<ExecImage, los_sched::process::SpawnError>;
+    type PrepareExecHook =
+        fn(&[u8], &[&str], &[&str]) -> Result<ExecImage, los_sched::process::SpawnError>;
     let prepare_hook: PrepareExecHook = unsafe { core::mem::transmute(hook_ptr) };
 
     let exec_image = match prepare_hook(&elf_data, argv, envp) {
@@ -446,7 +474,11 @@ fn execve_internal(
 }
 
 /// TEAM_436: Read a null-terminated C string from user space.
-fn read_user_cstring(ttbr0: usize, ptr: usize, max_len: usize) -> Result<alloc::string::String, u32> {
+fn read_user_cstring(
+    ttbr0: usize,
+    ptr: usize,
+    max_len: usize,
+) -> Result<alloc::string::String, u32> {
     use alloc::string::String;
 
     if ptr == 0 {
@@ -540,11 +572,16 @@ pub fn sys_spawn_args(
     let path_len = path_len.min(256);
     let task = los_sched::current_task();
     let mut path_buf = [0u8; 256];
-    let path =
-        crate::copy_user_string(task.ttbr0.load(Ordering::Acquire), path_ptr, path_len, &mut path_buf).map_err(|e| {
-            log::debug!("[SYSCALL] spawn_args: Invalid path: errno={}", e);
-            e
-        })?;
+    let path = crate::copy_user_string(
+        task.ttbr0.load(Ordering::Acquire),
+        path_ptr,
+        path_len,
+        &mut path_buf,
+    )
+    .map_err(|e| {
+        log::debug!("[SYSCALL] spawn_args: Invalid path: errno={}", e);
+        e
+    })?;
 
     // 3. Validate and read argv entries
     let entry_size = core::mem::size_of::<UserArgvEntry>();
@@ -552,7 +589,15 @@ pub fn sys_spawn_args(
         Some(size) => size,
         None => return Err(EINVAL),
     };
-    if argc > 0 && mm_user::validate_user_buffer(task.ttbr0.load(Ordering::Acquire), argv_ptr, argv_size, false).is_err() {
+    if argc > 0
+        && mm_user::validate_user_buffer(
+            task.ttbr0.load(Ordering::Acquire),
+            argv_ptr,
+            argv_size,
+            false,
+        )
+        .is_err()
+    {
         return Err(EFAULT);
     }
 
@@ -568,7 +613,8 @@ pub fn sys_spawn_args(
             None => return Err(EINVAL),
         };
         let entry = unsafe {
-            let kernel_ptr = mm_user::user_va_to_kernel_ptr(task.ttbr0.load(Ordering::Acquire), entry_ptr);
+            let kernel_ptr =
+                mm_user::user_va_to_kernel_ptr(task.ttbr0.load(Ordering::Acquire), entry_ptr);
             match kernel_ptr {
                 Some(p) => *(p as *const UserArgvEntry),
                 None => return Err(EFAULT),
@@ -577,7 +623,12 @@ pub fn sys_spawn_args(
 
         let arg_len = entry.len.min(MAX_ARG_LEN);
         let mut arg_buf = [0u8; MAX_ARG_LEN];
-        let arg_str = crate::copy_user_string(task.ttbr0.load(Ordering::Acquire), entry.ptr, arg_len, &mut arg_buf)?;
+        let arg_str = crate::copy_user_string(
+            task.ttbr0.load(Ordering::Acquire),
+            entry.ptr,
+            arg_len,
+            &mut arg_buf,
+        )?;
         args.push(alloc::string::String::from(arg_str));
     }
 

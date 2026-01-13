@@ -27,7 +27,7 @@ pub mod devno {
     pub const FULL_MINOR: u32 = 7;
     /// /dev/urandom minor
     pub const URANDOM_MINOR: u32 = 9;
-    
+
     /// TEAM_453: TTY devices major number
     pub const TTY_MAJOR: u32 = 5;
     /// /dev/console minor

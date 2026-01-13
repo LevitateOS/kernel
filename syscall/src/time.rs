@@ -202,7 +202,12 @@ pub fn sys_gettimeofday(tv: usize, _tz: usize) -> SyscallResult {
 ///
 /// # Returns
 /// Ok(0) on success, Err(errno) on failure
-pub fn sys_clock_nanosleep(clockid: i32, flags: i32, req_ptr: usize, _rem_ptr: usize) -> SyscallResult {
+pub fn sys_clock_nanosleep(
+    clockid: i32,
+    flags: i32,
+    req_ptr: usize,
+    _rem_ptr: usize,
+) -> SyscallResult {
     // Validate clockid (we only support CLOCK_REALTIME and CLOCK_MONOTONIC)
     if clockid != 0 && clockid != 1 {
         return Err(EINVAL);
@@ -242,7 +247,8 @@ pub fn sys_clock_nanosleep(clockid: i32, flags: i32, req_ptr: usize, _rem_ptr: u
         // Convert requested absolute time to ticks
         let req_secs = req.tv_sec as u64;
         let req_nanos = req.tv_nsec as u64;
-        let target_ticks = req_secs.saturating_mul(freq)
+        let target_ticks = req_secs
+            .saturating_mul(freq)
             .saturating_add((req_nanos as u128 * freq as u128 / 1_000_000_000) as u64);
 
         // Sleep until we reach or pass the target time

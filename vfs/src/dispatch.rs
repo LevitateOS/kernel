@@ -59,16 +59,19 @@ fn vfs_open_create(path: &str, flags: OpenFlags, create_mode: u32) -> VfsResult<
     // Try to look up first (following symlinks if needed)
     // TEAM_466: Use resolve_symlinks for existing files, unless O_NOFOLLOW
     let lookup_result = if flags.is_nofollow() {
-        dcache().lookup(path).map(|d| {
-            let inode = d.get_inode();
-            // O_NOFOLLOW + O_CREAT on existing symlink = ELOOP
-            if let Some(ref i) = inode {
-                if i.is_symlink() {
-                    return Err(VfsError::TooManySymlinks);
+        dcache()
+            .lookup(path)
+            .map(|d| {
+                let inode = d.get_inode();
+                // O_NOFOLLOW + O_CREAT on existing symlink = ELOOP
+                if let Some(ref i) = inode {
+                    if i.is_symlink() {
+                        return Err(VfsError::TooManySymlinks);
+                    }
                 }
-            }
-            Ok(inode)
-        }).and_then(|r| r)
+                Ok(inode)
+            })
+            .and_then(|r| r)
     } else {
         resolve_symlinks(path).map(Some)
     };

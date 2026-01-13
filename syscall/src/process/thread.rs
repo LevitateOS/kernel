@@ -6,8 +6,8 @@
 //! TEAM_420: Uses linux_raw_sys directly, no shims.
 //! TEAM_432: Added fork() support (full address space copy).
 
-use core::sync::atomic::Ordering;
 use crate::SyscallResult;
+use core::sync::atomic::Ordering;
 use los_mm::user as mm_user;
 // TEAM_420: Direct imports from linux_raw_sys
 use linux_raw_sys::errno::ENOMEM;
@@ -94,14 +94,20 @@ fn clone_thread(
 
     // TEAM_230: Create the thread
     // TEAM_443: Pass flags so create_thread can share fd_table when CLONE_FILES is set
-    let child =
-        match los_sched::thread::create_thread(parent_ttbr0, stack, thread_tls, clear_tid, flags, tf) {
-            Ok(c) => c,
-            Err(e) => {
-                log::warn!("[SYSCALL] clone: create_thread failed: {:?}", e);
-                return Err(ENOMEM);
-            }
-        };
+    let child = match los_sched::thread::create_thread(
+        parent_ttbr0,
+        stack,
+        thread_tls,
+        clear_tid,
+        flags,
+        tf,
+    ) {
+        Ok(c) => c,
+        Err(e) => {
+            log::warn!("[SYSCALL] clone: create_thread failed: {:?}", e);
+            return Err(ENOMEM);
+        }
+    };
 
     let child_tid_value = child.id.0;
 
@@ -176,7 +182,9 @@ fn clone_fork(
     // TEAM_432: Handle CLONE_PARENT_SETTID - write child PID to parent's address
     // TEAM_456: Use .load() since ttbr0 is now AtomicUsize
     if flags & CLONE_PARENT_SETTID != 0 && parent_tid != 0 {
-        if let Some(ptr) = mm_user::user_va_to_kernel_ptr(parent.ttbr0.load(Ordering::Acquire), parent_tid) {
+        if let Some(ptr) =
+            mm_user::user_va_to_kernel_ptr(parent.ttbr0.load(Ordering::Acquire), parent_tid)
+        {
             // SAFETY: user_va_to_kernel_ptr verified the address is mapped.
             unsafe {
                 *(ptr as *mut i32) = child_pid as i32;
@@ -189,7 +197,9 @@ fn clone_fork(
     // the child's ttbr0 for this write.
     // TEAM_456: Use .load() since ttbr0 is now AtomicUsize
     if flags & CLONE_CHILD_SETTID != 0 && child_tid != 0 {
-        if let Some(ptr) = mm_user::user_va_to_kernel_ptr(child.ttbr0.load(Ordering::Acquire), child_tid) {
+        if let Some(ptr) =
+            mm_user::user_va_to_kernel_ptr(child.ttbr0.load(Ordering::Acquire), child_tid)
+        {
             // SAFETY: user_va_to_kernel_ptr verified the address is mapped
             // in the child's address space.
             unsafe {

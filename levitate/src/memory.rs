@@ -7,7 +7,7 @@
 use crate::boot::{BootInfo, MemoryKind};
 use los_hal::allocator::Page;
 // TEAM_462: Import from central constants module
-use los_hal::mmu::{page_align_down, page_align_up, pages_needed, PAGE_SIZE};
+use los_hal::mmu::{PAGE_SIZE, page_align_down, page_align_up, pages_needed};
 use los_mm::add_reserved;
 
 /// Maximum number of RAM regions we can track.

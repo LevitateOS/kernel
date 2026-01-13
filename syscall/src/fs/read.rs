@@ -427,7 +427,9 @@ pub fn sys_sendfile(out_fd: i32, in_fd: i32, offset_ptr: usize, count: usize) ->
         for i in 0..8 {
             if let Some(ptr) = mm_user::user_va_to_kernel_ptr(ttbr0, offset_ptr + i) {
                 // SAFETY: We validated the buffer above
-                unsafe { *ptr = offset_bytes[i]; }
+                unsafe {
+                    *ptr = offset_bytes[i];
+                }
             }
         }
         // Restore original position if we saved it

@@ -37,8 +37,7 @@ pub static PROCESS_TABLE: IrqSafeLock<BTreeMap<Pid, ProcessEntry>> =
     IrqSafeLock::new(BTreeMap::new());
 
 /// TEAM_454: Tasks waiting for ANY child to exit (used by waitpid(-1))
-static ANY_CHILD_WAITERS: IrqSafeLock<Vec<Arc<TaskControlBlock>>> =
-    IrqSafeLock::new(Vec::new());
+static ANY_CHILD_WAITERS: IrqSafeLock<Vec<Arc<TaskControlBlock>>> = IrqSafeLock::new(Vec::new());
 
 /// TEAM_188: Register a new process in the table.
 ///

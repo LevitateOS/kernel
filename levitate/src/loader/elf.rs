@@ -8,7 +8,7 @@
 //! - Program Header: 56 bytes each
 //! - AArch64 Machine Type: EM_AARCH64 = 183
 
-use los_hal::mmu::{self, page_align_down, page_align_up, PAGE_MASK, PAGE_SIZE, PageFlags};
+use los_hal::mmu::{self, PAGE_MASK, PAGE_SIZE, PageFlags, page_align_down, page_align_up};
 use los_mm::user as mm_user;
 use los_mm::vma::{Vma, VmaFlags, VmaList};
 

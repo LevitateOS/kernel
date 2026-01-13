@@ -131,9 +131,9 @@ pub enum SyscallNumber {
     Gettimeofday = 1094, // TEAM_409: Legacy time (not standard aarch64, custom number)
     Getrusage = 165,     // TEAM_409: Resource usage (standard aarch64)
     // TEAM_459: Syscalls for BusyBox
-    Sendfile = 71,       // Copy data between file descriptors
-    Socket = 198,        // Socket creation (stub - no network stack yet)
-    Socketpair = 199,    // Create pair of connected sockets
+    Sendfile = 71,    // Copy data between file descriptors
+    Socket = 198,     // Socket creation (stub - no network stack yet)
+    Socketpair = 199, // Create pair of connected sockets
 
     // === Custom LevitateOS syscalls (temporary, until clone/execve work) ===
     /// TEAM: Spawn process (custom, will be replaced by clone+execve)
@@ -254,9 +254,9 @@ impl SyscallNumber {
             166 => Some(Self::Umask),
             1090 => Some(Self::Chmod),
             52 => Some(Self::Fchmod),
-            53 => Some(Self::Fchmodat),  // TEAM_450
+            53 => Some(Self::Fchmodat), // TEAM_450
             1092 => Some(Self::Chown),
-            54 => Some(Self::Fchownat),  // TEAM_450
+            54 => Some(Self::Fchownat), // TEAM_450
             55 => Some(Self::Fchown),
             // TEAM_409: Additional syscalls for coreutils
             79 => Some(Self::Fstatat),

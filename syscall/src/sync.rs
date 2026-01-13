@@ -19,7 +19,7 @@ use los_mm::user as mm_user; // TEAM_422: Import for downcasting
 // TEAM_420: Direct linux_raw_sys imports, no shims
 use linux_raw_sys::errno::{EAGAIN, EFAULT, EINVAL};
 // TEAM_464: Import POLL* constants from linux-raw-sys (canonical source, u32)
-use linux_raw_sys::general::{POLLIN, POLLPRI, POLLOUT, POLLERR, POLLHUP, POLLNVAL};
+use linux_raw_sys::general::{POLLERR, POLLHUP, POLLIN, POLLNVAL, POLLOUT, POLLPRI};
 use los_sched::scheduler::SCHEDULER;
 use los_sched::{TaskControlBlock, TaskState, current_task, yield_now};
 
