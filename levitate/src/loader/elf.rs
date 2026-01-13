@@ -33,6 +33,9 @@ pub const EM_AARCH64: u16 = 183;
 /// Program Header Type: Loadable segment
 pub const PT_LOAD: u32 = 1;
 
+/// TEAM_470: Program Header Type: Interpreter path
+pub const PT_INTERP: u32 = 3;
+
 /// Segment Flags
 pub const PF_X: u32 = 1; // Execute
 #[allow(dead_code)]
@@ -349,6 +352,26 @@ impl<'a> Elf<'a> {
         })
     }
 
+    /// TEAM_470: Find the interpreter path from PT_INTERP segment, if present.
+    /// Returns None for statically-linked binaries.
+    pub fn find_interp(&self) -> Option<&str> {
+        for phdr in self.program_headers() {
+            if phdr.p_type == PT_INTERP {
+                let start = phdr.p_offset as usize;
+                let end = start + phdr.p_filesz as usize;
+                if end <= self.data.len() {
+                    // PT_INTERP contains null-terminated path
+                    let interp_data = &self.data[start..end];
+                    // Strip trailing null and return
+                    return core::str::from_utf8(interp_data)
+                        .ok()
+                        .map(|s| s.trim_end_matches('\0'));
+                }
+            }
+        }
+        None
+    }
+
     /// Load the ELF into a user address space.
     ///
     /// # Arguments
@@ -541,6 +564,150 @@ impl<'a> Elf<'a> {
     // TEAM_414: Removed dead code - process_relocations(), apply_relocation(), write_user_u64()
     // PIE binaries perform self-relocation via _start, so kernel-side relocation is not needed.
     // The goblin dependency was also removed as it was only used by this dead code.
+
+    /// TEAM_470: Load ELF segments at a specified base address.
+    /// Used for loading the dynamic linker at a fixed location.
+    ///
+    /// Unlike `load()` which uses `self.load_base()`, this method
+    /// uses the provided `base` address for all segment mappings.
+    ///
+    /// # Arguments
+    /// * `ttbr0_phys` - Physical address of user L0 page table
+    /// * `base` - Base address to load the ELF at
+    ///
+    /// # Returns
+    /// Tuple of (entry_point, initial_brk, vma_list) on success.
+    pub fn load_at(&self, ttbr0_phys: usize, base: usize) -> Result<(usize, usize, VmaList), ElfError> {
+        let mut max_vaddr = 0;
+        let load_base = base; // Use provided base instead of self.load_base()
+        let mut vma_list = VmaList::new();
+
+        for phdr in self.program_headers() {
+            if !phdr.is_loadable() {
+                continue;
+            }
+
+            // Apply provided load_base to vaddr
+            let vaddr = load_base + phdr.vaddr();
+            let memsz = phdr.memsz();
+            let filesz = phdr.filesz();
+            let offset = phdr.offset();
+            let flags = phdr.page_flags();
+
+            // Track highest address for brk
+            let segment_end = vaddr + memsz;
+            if segment_end > max_vaddr {
+                max_vaddr = segment_end;
+            }
+
+            // Allocate pages for this segment
+            let page_start = page_align_down(vaddr);
+            let page_end = page_align_up(vaddr + memsz);
+            let num_pages = (page_end - page_start) / PAGE_SIZE;
+
+            // Allocate physical pages
+            for i in 0..num_pages {
+                let page_va = page_start + i * PAGE_SIZE;
+
+                // Check if page is already mapped (segments can share pages)
+                let l0_va = mmu::phys_to_virt(ttbr0_phys);
+                // SAFETY: ttbr0_phys is a valid page table root.
+                let already_mapped = mmu::walk_to_entry(
+                    unsafe { &mut *(l0_va as *mut mmu::PageTable) },
+                    page_va,
+                    3,
+                    false,
+                )
+                .map(|w| w.table.entry(w.index).is_valid())
+                .unwrap_or(false);
+
+                if already_mapped {
+                    // Upgrade permissions if needed
+                    if flags == PageFlags::USER_DATA {
+                        let l0_va = mmu::phys_to_virt(ttbr0_phys);
+                        // SAFETY: ttbr0_phys is a valid page table root.
+                        if let Ok(walk) = mmu::walk_to_entry(
+                            unsafe { &mut *(l0_va as *mut mmu::PageTable) },
+                            page_va,
+                            3,
+                            false,
+                        ) {
+                            let entry = walk.table.entry_mut(walk.index);
+                            let phys = entry.address();
+                            entry.set(phys, PageFlags::USER_CODE_DATA | PageFlags::TABLE);
+                            mmu::tlb_flush_page(page_va);
+                        }
+                    }
+                    continue;
+                }
+
+                // Allocate a physical page
+                let phys = crate::memory::FRAME_ALLOCATOR
+                    .alloc_page()
+                    .ok_or(ElfError::AllocationFailed)?;
+
+                // Zero the page first
+                // SAFETY: phys is a newly allocated page.
+                unsafe {
+                    let page_ptr = mmu::phys_to_virt(phys) as *mut u8;
+                    core::ptr::write_bytes(page_ptr, 0, PAGE_SIZE);
+                }
+
+                // Map into user space
+                // SAFETY: The page and addresses are validated.
+                unsafe {
+                    mm_user::map_user_page(ttbr0_phys, page_va, phys, flags)
+                        .map_err(|_| ElfError::MappingFailed)?;
+                }
+            }
+
+            // Copy segment data from ELF file
+            if filesz > 0 {
+                let src = &self.data[offset..offset + filesz];
+
+                for (i, byte) in src.iter().enumerate() {
+                    let dst_va = vaddr + i;
+                    let page_va = page_align_down(dst_va);
+                    let page_offset = dst_va & PAGE_MASK;
+
+                    let l0_va = mmu::phys_to_virt(ttbr0_phys);
+
+                    // SAFETY: ttbr0_phys is a valid page table root.
+                    if let Ok(walk) = mmu::walk_to_entry(
+                        unsafe { &mut *(l0_va as *mut mmu::PageTable) },
+                        page_va,
+                        3,
+                        false,
+                    ) {
+                        let entry_phys = walk.table.entry(walk.index).address();
+                        let dst_phys = entry_phys + page_offset;
+                        let dst = mmu::phys_to_virt(dst_phys) as *mut u8;
+
+                        // SAFETY: dst is a valid pointer within a mapped page.
+                        unsafe {
+                            *dst = *byte;
+                        }
+                    }
+                }
+            }
+
+            // Create VMA for this segment
+            let vma_flags = page_flags_to_vma_flags(flags);
+            let _ = vma_list.insert(Vma::new(page_start, page_end, vma_flags));
+        }
+
+        // Calculate initial brk (page-aligned end of loaded segments)
+        let initial_brk = page_align_up(max_vaddr);
+
+        // Return entry point adjusted by the provided base
+        let entry_point = base + self.header.e_entry as usize;
+        log::debug!(
+            "[ELF] Loaded interpreter at base 0x{:x}, entry 0x{:x}",
+            base,
+            entry_point
+        );
+        Ok((entry_point, initial_brk, vma_list))
+    }
 }
 
 use los_hal::traits::PageAllocator;
