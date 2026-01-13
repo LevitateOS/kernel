@@ -82,7 +82,9 @@ pub fn sys_openat(dirfd: i32, pathname: usize, flags: u32, mode: u32) -> Syscall
     match vfs_open(&resolved_path, vfs_flags, effective_mode) {
         Ok(file) => {
             let mut fd_table = task.fd_table.lock();
-            match fd_table.alloc(FdType::VfsFile(file)) {
+            // TEAM_468: Pass cloexec flag from O_CLOEXEC
+            let cloexec = vfs_flags.is_cloexec();
+            match fd_table.alloc_cloexec(FdType::VfsFile(file), cloexec) {
                 Some(fd) => Ok(fd as i64),
                 None => Err(EMFILE),
             }

@@ -103,6 +103,7 @@ impl Drop for FdType {
 /// TEAM_168: A single file descriptor entry.
 /// TEAM_194: Removed Copy derive since FdType no longer implements Copy.
 /// TEAM_195: Removed Debug derive since FdType no longer implements Debug.
+/// TEAM_468: Added cloexec flag for O_CLOEXEC support.
 #[derive(Clone)]
 pub struct FdEntry {
     /// Type and state of this fd
@@ -110,6 +111,8 @@ pub struct FdEntry {
     /// Reference count (for future dup() support)
     #[allow(dead_code)]
     pub refcount: usize,
+    /// TEAM_468: Close-on-exec flag (set by O_CLOEXEC or F_SETFD)
+    pub cloexec: bool,
 }
 
 impl FdEntry {
@@ -118,6 +121,16 @@ impl FdEntry {
         Self {
             fd_type,
             refcount: 1,
+            cloexec: false,
+        }
+    }
+
+    /// TEAM_468: Create a new fd entry with cloexec flag.
+    pub fn new_cloexec(fd_type: FdType, cloexec: bool) -> Self {
+        Self {
+            fd_type,
+            refcount: 1,
+            cloexec,
         }
     }
 }
@@ -202,6 +215,13 @@ impl FdTable {
     ///
     /// Returns the fd number on success, or None if table is full.
     pub fn alloc(&mut self, fd_type: FdType) -> Option<usize> {
+        self.alloc_cloexec(fd_type, false)
+    }
+
+    /// TEAM_468: Allocate a new file descriptor with optional cloexec flag.
+    ///
+    /// Returns the fd number on success, or None if table is full.
+    pub fn alloc_cloexec(&mut self, fd_type: FdType, cloexec: bool) -> Option<usize> {
         // TEAM_459: Fast path - check next_free hint first
         let fd = if self.next_free < MAX_FDS && !self.bitmap_is_set(self.next_free) {
             self.next_free
@@ -217,7 +237,7 @@ impl FdTable {
 
         // Mark FD as used in bitmap and store entry
         self.bitmap_set(fd);
-        self.entries[fd] = Some(FdEntry::new(fd_type));
+        self.entries[fd] = Some(FdEntry::new_cloexec(fd_type, cloexec));
 
         // Update next_free hint (scan forward from allocated FD)
         self.next_free = fd + 1;
@@ -271,6 +291,39 @@ impl FdTable {
         // TEAM_459: Reset bitmap
         self.bitmap = [0u64; BITMAP_WORDS];
         self.next_free = 0;
+    }
+
+    /// TEAM_468: Close all file descriptors with O_CLOEXEC flag set.
+    /// Called during execve to implement close-on-exec semantics.
+    pub fn close_cloexec(&mut self) {
+        for fd in 0..self.entries.len() {
+            if let Some(entry) = &self.entries[fd] {
+                if entry.cloexec {
+                    // Close this fd
+                    self.entries[fd] = None;
+                    self.bitmap_clear(fd);
+                    if fd < self.next_free {
+                        self.next_free = fd;
+                    }
+                }
+            }
+        }
+    }
+
+    /// TEAM_468: Get the cloexec flag for a file descriptor.
+    pub fn get_cloexec(&self, fd: usize) -> Option<bool> {
+        self.get(fd).map(|e| e.cloexec)
+    }
+
+    /// TEAM_468: Set the cloexec flag for a file descriptor.
+    /// Returns true if successful, false if fd is invalid.
+    pub fn set_cloexec(&mut self, fd: usize, cloexec: bool) -> bool {
+        if let Some(Some(entry)) = self.entries.get_mut(fd) {
+            entry.cloexec = cloexec;
+            true
+        } else {
+            false
+        }
     }
 
     /// TEAM_168: Check if a file descriptor is valid.

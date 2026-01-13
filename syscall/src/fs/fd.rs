@@ -39,12 +39,14 @@ use los_sched::fd_table::FdType;
 
 /// TEAM_394: sys_fcntl - File control operations.
 ///
-/// Stub implementation for brush shell compatibility.
+/// TEAM_468: Now properly implements F_GETFD, F_SETFD, F_DUPFD_CLOEXEC.
 /// Currently supports F_GETFD, F_SETFD, F_GETFL, F_SETFL, F_SETPIPE_SZ, F_GETPIPE_SZ.
 /// TEAM_413: Updated to use is_valid_fd helper.
 /// TEAM_421: Updated to return SyscallResult.
 /// TEAM_464: Updated cmd to u32 to match linux-raw-sys types.
 pub fn sys_fcntl(fd: i32, cmd: u32, arg: usize) -> SyscallResult {
+    use linux_raw_sys::general::FD_CLOEXEC;
+
     // TEAM_413: Use is_valid_fd helper for validation
     if !is_valid_fd(fd as usize) {
         return Err(EBADF);
@@ -53,22 +55,44 @@ pub fn sys_fcntl(fd: i32, cmd: u32, arg: usize) -> SyscallResult {
     let task = current_task();
 
     match cmd {
-        F_DUPFD | F_DUPFD_CLOEXEC => {
-            // Duplicate fd to >= arg
-            // TEAM_438: F_DUPFD_CLOEXEC sets close-on-exec (we ignore that for now)
+        F_DUPFD => {
+            // Duplicate fd to >= arg (cloexec not set on new fd)
             let mut fd_table = task.fd_table.lock();
             match fd_table.dup(fd as usize) {
                 Some(new_fd) => Ok(new_fd as i64),
                 None => Err(EMFILE),
             }
         }
+        F_DUPFD_CLOEXEC => {
+            // TEAM_468: Duplicate fd with cloexec set on new fd
+            let mut fd_table = task.fd_table.lock();
+            let fd_type = match fd_table.get(fd as usize) {
+                Some(entry) => entry.fd_type.clone(),
+                None => return Err(EBADF),
+            };
+            match fd_table.alloc_cloexec(fd_type, true) {
+                Some(new_fd) => Ok(new_fd as i64),
+                None => Err(EMFILE),
+            }
+        }
         F_GETFD => {
-            // Get close-on-exec flag (stub: always return 0)
-            Ok(0)
+            // TEAM_468: Return actual cloexec flag value
+            let fd_table = task.fd_table.lock();
+            match fd_table.get_cloexec(fd as usize) {
+                Some(true) => Ok(FD_CLOEXEC as i64),
+                Some(false) => Ok(0),
+                None => Err(EBADF),
+            }
         }
         F_SETFD => {
-            // Set close-on-exec flag (stub: ignore)
-            Ok(0)
+            // TEAM_468: Set cloexec flag based on FD_CLOEXEC bit
+            let mut fd_table = task.fd_table.lock();
+            let cloexec = (arg as u32 & FD_CLOEXEC) != 0;
+            if fd_table.set_cloexec(fd as usize, cloexec) {
+                Ok(0)
+            } else {
+                Err(EBADF)
+            }
         }
         F_GETFL => {
             // Get file status flags (stub: return O_RDWR)

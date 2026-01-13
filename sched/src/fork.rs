@@ -6,7 +6,7 @@
 extern crate alloc;
 use alloc::sync::Arc;
 use alloc::vec;
-use core::sync::atomic::{AtomicU8, AtomicU32, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicU8, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 
 use los_hal::IrqSafeLock;
 
@@ -207,7 +207,7 @@ pub fn create_fork(tf: &SyscallFrame) -> Result<Arc<TaskControlBlock>, ForkError
         cwd: IrqSafeLock::new(child_cwd),
         // Signal state - cloned from parent
         pending_signals: AtomicU32::new(0), // Child starts with no pending signals
-        blocked_signals: AtomicU32::new(parent.blocked_signals.load(Ordering::Acquire)),
+        blocked_signals: AtomicU64::new(parent.blocked_signals.load(Ordering::Acquire)),
         signal_handlers: IrqSafeLock::new(child_signal_handlers),
         signal_trampoline: AtomicUsize::new(parent_trampoline),
         // No clear-on-exit TID for forked processes

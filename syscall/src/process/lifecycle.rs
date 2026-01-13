@@ -331,11 +331,20 @@ fn execve_internal(
     // 3. Get current task and apply the new image
     let task = los_sched::current_task();
 
-    // TODO(TEAM_436): Close O_CLOEXEC file descriptors
-    // task.fd_table.lock().close_cloexec();
+    // TEAM_468: Close O_CLOEXEC file descriptors (implements POSIX close-on-exec)
+    task.fd_table.lock().close_cloexec();
 
-    // TODO(TEAM_436): Reset signal handlers to default
-    // task.signal_handlers.lock().reset_to_default();
+    // TEAM_468: Reset signal handlers to default on exec.
+    // Per POSIX: SIG_IGN remains SIG_IGN, all other handlers become SIG_DFL.
+    {
+        const SIG_IGN: usize = 1;
+        let mut handlers = task.signal_handlers.lock();
+        for action in handlers.iter_mut() {
+            if action.handler != SIG_IGN {
+                *action = los_sched::SignalAction::default();
+            }
+        }
+    }
 
     // 4. Update task state with new address space
     // Note: We can't directly modify task fields since they're behind Arc.

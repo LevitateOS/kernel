@@ -23,7 +23,7 @@ use los_arch_x86_64::{Context, cpu, cpu_switch_to, exception_return, switch_mmu_
 
 use alloc::boxed::Box;
 use alloc::string::String;
-use core::sync::atomic::{AtomicU8, AtomicU32, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicU8, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 
 /// TEAM_070: Hook called immediately after a context switch.
 /// Used to release scheduler locks or perform cleanup.
@@ -298,10 +298,8 @@ pub struct TaskControlBlock {
     /// TEAM_216: Pending signals bitmask
     pub pending_signals: AtomicU32,
     /// TEAM_216: Blocked signals bitmask
-    // TODO(TEAM_441): Upgrade blocked_signals from AtomicU32 to AtomicU64
-    // for full 64-signal support. sys_sigprocmask also needs updating.
-    // See: docs/planning/brush-requirements/phase-4.md Step 5
-    pub blocked_signals: AtomicU32,
+    /// TEAM_468: Upgraded from AtomicU32 to AtomicU64 for full 64-signal support.
+    pub blocked_signals: AtomicU64,
     /// TEAM_216: Signal handlers (userspace addresses)
     /// TEAM_441: Expanded to SignalAction array with full sigaction fields
     pub signal_handlers: IrqSafeLock<[SignalAction; 64]>,
@@ -388,7 +386,7 @@ impl Default for TaskControlBlock {
             fd_table: fd_table::new_shared_fd_table(),
             cwd: IrqSafeLock::new(String::new()),
             pending_signals: AtomicU32::new(0),
-            blocked_signals: AtomicU32::new(0),
+            blocked_signals: AtomicU64::new(0),
             // TEAM_441: Initialize with default SignalAction (all SIG_DFL)
             signal_handlers: IrqSafeLock::new([SignalAction::default(); 64]),
             signal_trampoline: AtomicUsize::new(0),
@@ -438,7 +436,7 @@ impl From<UserTask> for TaskControlBlock {
             cwd: IrqSafeLock::new(String::from("/")),
             // TEAM_216: Initialize signal state for new process
             pending_signals: AtomicU32::new(0),
-            blocked_signals: AtomicU32::new(0),
+            blocked_signals: AtomicU64::new(0),
             // TEAM_441: Initialize with default SignalAction (all SIG_DFL)
             signal_handlers: IrqSafeLock::new([SignalAction::default(); 64]),
             signal_trampoline: AtomicUsize::new(0),

@@ -7,7 +7,7 @@ extern crate alloc;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec;
-use core::sync::atomic::{AtomicU8, AtomicU32, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicU8, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 
 use los_hal::IrqSafeLock;
 use los_mm::heap::ProcessHeap;
@@ -141,7 +141,7 @@ pub fn create_thread(
         cwd: IrqSafeLock::new(String::from("/")),
         // TEAM_230: Thread signal state
         pending_signals: AtomicU32::new(0),
-        blocked_signals: AtomicU32::new(0),
+        blocked_signals: AtomicU64::new(0),
         // TEAM_441: Initialize with default SignalAction (all SIG_DFL)
         signal_handlers: IrqSafeLock::new([SignalAction::default(); 64]),
         signal_trampoline: AtomicUsize::new(0),

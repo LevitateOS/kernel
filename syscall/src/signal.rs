@@ -411,9 +411,10 @@ pub fn sys_sigprocmask(how: u32, set_addr: usize, oldset_addr: usize) -> Syscall
     let ttbr0 = task.ttbr0.load(Ordering::Acquire);
 
     // 1. If oldset_addr is provided, return the current mask
+    // TEAM_468: Updated to use 64-bit mask
     if oldset_addr != 0 {
         let current_mask = task.blocked_signals.load(Ordering::Acquire);
-        for i in 0..4 {
+        for i in 0..8 {
             let byte = (current_mask >> (i * 8)) as u8;
             if !crate::write_to_user_buf(ttbr0, oldset_addr, i, byte) {
                 return Err(EFAULT);
@@ -422,12 +423,13 @@ pub fn sys_sigprocmask(how: u32, set_addr: usize, oldset_addr: usize) -> Syscall
     }
 
     // 2. If set_addr is provided, update the mask
+    // TEAM_468: Updated to use 64-bit mask
     if set_addr != 0 {
-        // Read 32-bit mask from userspace
-        let mut mask: u32 = 0;
-        for i in 0..4 {
+        // Read 64-bit mask from userspace
+        let mut mask: u64 = 0;
+        for i in 0..8 {
             if let Some(byte) = crate::read_from_user(ttbr0, set_addr + i) {
-                mask |= (byte as u32) << (i * 8);
+                mask |= (byte as u64) << (i * 8);
             } else {
                 return Err(EFAULT);
             }

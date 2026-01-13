@@ -87,7 +87,8 @@ mod aarch64_handlers {
         let task = current_task();
 
         // Get pending signals that are not blocked
-        let pending = task.pending_signals.load(Ordering::Acquire);
+        // TEAM_468: Cast pending to u64 since blocked_signals is now 64-bit
+        let pending = task.pending_signals.load(Ordering::Acquire) as u64;
         let blocked = task.blocked_signals.load(Ordering::Acquire);
         let deliverable = pending & !blocked;
 
