@@ -216,6 +216,46 @@ mod aarch64_handlers {
             handler
         );
     }
+
+    /// TEAM_472: Check if preemption is needed before returning to userspace.
+    /// Called from exception handler after IRQs.
+    #[unsafe(no_mangle)]
+    pub extern "C" fn check_preemption_hook(_frame: &mut SyscallFrame) {
+        use core::sync::atomic::Ordering;
+
+        // Check and clear the reschedule flag
+        let needs_reschedule = unsafe {
+            let pcr = crate::arch::cpu::get_pcr();
+            pcr.needs_reschedule.swap(false, Ordering::AcqRel)
+        };
+
+        if !needs_reschedule {
+            return;
+        }
+
+        // Check if preemption is disabled
+        let preempt_disabled = unsafe {
+            let pcr = crate::arch::cpu::get_pcr();
+            pcr.preempt_count.load(Ordering::Acquire) > 0
+        };
+        if preempt_disabled {
+            return;
+        }
+
+        // Get current task and check its state
+        let current = los_sched::current_task();
+        let state = current.get_state();
+
+        // Don't preempt blocked or exited tasks
+        if state == los_sched::TaskState::Blocked || state == los_sched::TaskState::Exited {
+            return;
+        }
+
+        // Yield to the next ready task
+        if let Some(next) = los_sched::scheduler::SCHEDULER.yield_and_reschedule(current) {
+            los_sched::switch_to(next);
+        }
+    }
 }
 
 // Local modules that remain in levitate

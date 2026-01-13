@@ -154,14 +154,18 @@ macro_rules! irq_handler {
                 "push rbp",
 
                 // TEAM_299: Conditional swapgs
-                "test qword ptr [rsp + 88], 3",
+                // TEAM_472: Also compute from_userspace flag for preemption check
+                "xor rsi, rsi",                    // from_userspace = 0
+                "test qword ptr [rsp + 88], 3",   // Check CS CPL bits
                 "jz 1f",
+                "mov rsi, 1",                      // from_userspace = 1
                 "swapgs",
                 "1:",
 
                 "mov rbp, rsp",
                 "and rsp, -16",
-                "mov rdi, {vector}",
+                "mov rdi, {vector}",               // First arg: vector
+                // rsi already contains from_userspace  // Second arg: from_userspace
                 "call {handler}",
                 "mov rsp, rbp",
 
@@ -323,10 +327,12 @@ extern "C" fn page_fault_handler(frame: &ExceptionStackFrame, error_code: u64) {
     );
 }
 
+/// TEAM_472: IRQ dispatch with preemption check.
+/// from_userspace is 1 if the IRQ came from userspace (CPL != 0), 0 otherwise.
 #[unsafe(no_mangle)]
-extern "C" fn irq_dispatch(vector: u64) {
-    // 1. Dispatch to registered handler
-    if !crate::x86_64::interrupts::apic::dispatch(vector as u8) {
+extern "C" fn irq_dispatch(vector: u64, from_userspace: u64) {
+    // 1. Dispatch to registered handler with preemption check
+    if !crate::x86_64::interrupts::apic::dispatch_with_preempt(vector as u8, from_userspace != 0) {
         // TEAM_303: Log unhandled IRQs to serial
     }
 

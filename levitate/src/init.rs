@@ -168,6 +168,29 @@ impl InterruptHandler for TimerHandler {
             timer::API.set_timeout(freq / 100);
         }
 
+        // TEAM_472: Track time quantum for preemptive scheduling
+        if let Some(task) = los_sched::try_current_task() {
+            task.total_ticks.fetch_add(1, Ordering::Relaxed);
+
+            let remaining = task.ticks_remaining.fetch_sub(1, Ordering::AcqRel);
+            if remaining <= 1 {
+                // Quantum expired - set reschedule flag
+                // The actual context switch happens on exception return path
+                unsafe {
+                    #[cfg(target_arch = "aarch64")]
+                    {
+                        let pcr = los_arch_aarch64::cpu::get_pcr();
+                        pcr.needs_reschedule.store(true, Ordering::Release);
+                    }
+                    #[cfg(target_arch = "x86_64")]
+                    {
+                        let pcr = los_arch_x86_64::cpu::get_pcr();
+                        pcr.needs_reschedule.store(true, Ordering::Release);
+                    }
+                }
+            }
+        }
+
         // TEAM_089: Keep GPU display active with periodic flush (~10Hz)
         // Only flush every 10th interrupt (100Hz / 10 = 10Hz)
         static COUNTER: AtomicUsize = AtomicUsize::new(0);
@@ -188,11 +211,6 @@ impl InterruptHandler for TimerHandler {
         if los_hal::console::poll_for_ctrl_c() {
             crate::syscall::signal::signal_foreground_process(linux_raw_sys::general::SIGINT);
         }
-
-        // TEAM_070: Preemptive scheduling
-        // TEAM_148: Disabled preemption from IRQ context to prevent corruption.
-        // IRQ handlers must NOT yield. We rely on cooperative yielding in init/shell.
-        // crate::task::yield_now();
     }
 }
 
@@ -214,6 +232,49 @@ impl InterruptHandler for UartHandler {
 
 static TIMER_HANDLER: TimerHandler = TimerHandler;
 static UART_HANDLER: UartHandler = UartHandler;
+
+/// TEAM_472: Preemption check hook for x86_64.
+/// Called after each IRQ to check if a task switch is needed.
+#[cfg(target_arch = "x86_64")]
+fn check_preemption_x86(from_userspace: bool) {
+    // Only check preemption if we came from userspace
+    if !from_userspace {
+        return;
+    }
+
+    // Check and clear the reschedule flag
+    let needs_reschedule = unsafe {
+        let pcr = los_arch_x86_64::cpu::get_pcr();
+        pcr.needs_reschedule.swap(false, Ordering::AcqRel)
+    };
+
+    if !needs_reschedule {
+        return;
+    }
+
+    // Check if preemption is disabled
+    let preempt_disabled = unsafe {
+        let pcr = los_arch_x86_64::cpu::get_pcr();
+        pcr.preempt_count.load(Ordering::Acquire) > 0
+    };
+    if preempt_disabled {
+        return;
+    }
+
+    // Get current task and check its state
+    let current = los_sched::current_task();
+    let state = current.get_state();
+
+    // Don't preempt blocked or exited tasks
+    if state == los_sched::TaskState::Blocked || state == los_sched::TaskState::Exited {
+        return;
+    }
+
+    // Yield to the next ready task
+    if let Some(next) = los_sched::scheduler::SCHEDULER.yield_and_reschedule(current) {
+        los_sched::switch_to(next);
+    }
+}
 
 // =============================================================================
 // Initialization Sequence
@@ -262,6 +323,9 @@ pub fn run() -> ! {
             // TEAM_318: Register timer handler for GPU flush on x86_64
             // Uses existing apic::register_handler() which doesn't need MMIO access
             los_hal::x86_64::interrupts::apic::register_handler(32, &TIMER_HANDLER);
+
+            // TEAM_472: Register preemption check hook for x86_64
+            los_hal::x86_64::interrupts::apic::set_preempt_check_hook(check_preemption_x86);
         }
 
         crate::verbose!("Core drivers initialized.");

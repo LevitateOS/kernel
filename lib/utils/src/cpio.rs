@@ -116,7 +116,6 @@ impl<'a> CpioArchive<'a> {
     /// ```
     pub fn list_directory(&self, dir_path: &str) -> impl Iterator<Item = CpioEntry<'a>> {
         let normalized = Self::normalize_dir_path(dir_path);
-        let prefix_len = normalized.len();
 
         self.iter().filter(move |entry| {
             // Skip . and .. per Q2 decision
@@ -131,12 +130,29 @@ impl<'a> CpioArchive<'a> {
                 !name.contains('/')
                     || (name.ends_with('/') && !name[..name.len() - 1].contains('/'))
             } else {
-                // Entry must start with prefix and have no additional '/' after
-                if !name.starts_with(&normalized) {
+                // TEAM_471: Entry must start with "prefix/" (with trailing slash)
+                // For directory "lib", we check if name starts with "lib/"
+                let prefix_with_slash = if normalized.ends_with('/') {
+                    normalized
+                } else {
+                    // We need to check "normalized/" prefix
+                    if !name.starts_with(normalized) {
+                        return false;
+                    }
+                    // Check that the char after normalized is '/'
+                    if name.len() <= normalized.len() || name.as_bytes()[normalized.len()] != b'/' {
+                        return false;
+                    }
+                    // rest is everything after "normalized/"
+                    let rest = &name[normalized.len() + 1..];
+                    // Must have content after prefix and no additional directory separator
+                    return !rest.is_empty() && !rest.contains('/');
+                };
+                // If normalized already had trailing slash
+                if !name.starts_with(prefix_with_slash) {
                     return false;
                 }
-                let rest = &name[prefix_len..];
-                // Must have content after prefix and no additional directory separator
+                let rest = &name[prefix_with_slash.len()..];
                 !rest.is_empty() && !rest.contains('/')
             }
         })

@@ -1,7 +1,9 @@
 //! TEAM_222: Architecture-specific CPU instructions
 //! TEAM_409: Added Processor Control Region (PCR) for per-CPU state
+//! TEAM_472: Added preemption tracking fields
 
 use core::arch::asm;
+use core::sync::atomic::{AtomicBool, AtomicU32};
 
 /// TEAM_409: Processor Control Region (PCR) for AArch64.
 /// This structure is pointed to by TPIDR_EL1 in kernel mode.
@@ -20,8 +22,12 @@ pub struct ProcessorControlRegion {
     pub current_task_ptr: usize,
     /// CPU ID for multi-core support (offset 32)
     pub cpu_id: usize,
-    /// Padding for future use and alignment (offset 40)
-    pub _reserved: [usize; 3],
+    /// TEAM_472: Flag indicating preemption is needed on return to userspace (offset 40)
+    pub needs_reschedule: AtomicBool,
+    /// TEAM_472: Preemption disable depth counter (offset 41, padded to 44)
+    pub preempt_count: AtomicU32,
+    /// Padding for alignment (offset 48)
+    pub _reserved: [usize; 2],
 }
 
 pub const PCR_SELF_OFFSET: usize = 0;
@@ -38,7 +44,9 @@ impl ProcessorControlRegion {
             kernel_stack: 0,
             current_task_ptr: 0,
             cpu_id: 0,
-            _reserved: [0; 3],
+            needs_reschedule: AtomicBool::new(false),
+            preempt_count: AtomicU32::new(0),
+            _reserved: [0; 2],
         }
     }
 }

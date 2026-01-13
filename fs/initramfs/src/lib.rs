@@ -172,14 +172,21 @@ impl InitramfsSuperblock {
         // The CPIO mode already includes file type bits (S_IFREG, S_IFDIR, S_IFLNK).
         let mode = entry.mode;
 
-        Arc::new(Inode::new(
+        let inode = Arc::new(Inode::new(
             entry.ino,
             0,
             mode,
             &INITRAMFS_OPS,
             sb,
             Box::new(entry.name.to_string()),
-        ))
+        ));
+
+        // TEAM_471: Set the file size from CPIO entry data
+        inode
+            .size
+            .store(entry.data.len() as u64, core::sync::atomic::Ordering::Relaxed);
+
+        inode
     }
 
     pub fn make_virtual_dir_inode(&self, path: &str, sb: Weak<dyn Superblock>) -> Arc<Inode> {

@@ -141,6 +141,24 @@ pub fn current_task() -> Arc<TaskControlBlock> {
         .expect("current_task() called before scheduler init")
 }
 
+/// TEAM_472: Get the current task if one exists, without panicking.
+/// Returns None during early boot or if no task is running.
+/// Used by timer interrupt handler for preemption tracking.
+pub fn try_current_task() -> Option<Arc<TaskControlBlock>> {
+    #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+    unsafe {
+        let pcr = cpu::get_pcr();
+        let ptr = pcr.current_task_ptr as *const TaskControlBlock;
+        if !ptr.is_null() {
+            let arc = Arc::from_raw(ptr);
+            let cloned = arc.clone();
+            let _ = Arc::into_raw(arc);
+            return Some(cloned);
+        }
+    }
+    None
+}
+
 /// TEAM_070: Internal helper to set the current task.
 /// TEAM_409: Use PCR on both x86_64 and AArch64.
 pub unsafe fn set_current_task(task: Arc<TaskControlBlock>) {
@@ -177,6 +195,9 @@ pub fn switch_to(new_task: Arc<TaskControlBlock>) {
 
         // [MT3] Update current task pointer before switch
         set_current_task(new_task.clone()); // TEAM_299: Clone Arc for set_current_task
+
+        // TEAM_472: Reset quantum for the incoming task
+        new_task.ticks_remaining.store(QUANTUM_TICKS, Ordering::Release);
 
         // TEAM_299: Switch Page Tables (CR3/TTBR0)
         // Critical for process isolation. Without this, new task runs in old task's address space.
@@ -244,6 +265,60 @@ pub fn yield_now() {
     }
 }
 
+/// TEAM_472: RAII guard that disables preemption while held.
+/// When dropped, preemption is re-enabled.
+pub struct PreemptGuard {
+    _private: (),
+}
+
+impl PreemptGuard {
+    /// Create a new preemption guard, incrementing the preempt_count.
+    pub fn new() -> Self {
+        unsafe {
+            #[cfg(target_arch = "aarch64")]
+            {
+                let pcr = cpu::get_pcr();
+                pcr.preempt_count.fetch_add(1, Ordering::Release);
+            }
+            #[cfg(target_arch = "x86_64")]
+            {
+                let pcr = cpu::get_pcr();
+                pcr.preempt_count.fetch_add(1, Ordering::Release);
+            }
+        }
+        Self { _private: () }
+    }
+}
+
+impl Drop for PreemptGuard {
+    fn drop(&mut self) {
+        unsafe {
+            #[cfg(target_arch = "aarch64")]
+            {
+                let pcr = cpu::get_pcr();
+                pcr.preempt_count.fetch_sub(1, Ordering::Release);
+            }
+            #[cfg(target_arch = "x86_64")]
+            {
+                let pcr = cpu::get_pcr();
+                pcr.preempt_count.fetch_sub(1, Ordering::Release);
+            }
+        }
+    }
+}
+
+impl Default for PreemptGuard {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// TEAM_472: Disable preemption for the current scope.
+/// Returns a guard that re-enables preemption when dropped.
+pub fn preempt_disable() -> PreemptGuard {
+    PreemptGuard::new()
+}
+
 /// TEAM_070: Unique identifier for a task.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -266,6 +341,10 @@ pub enum TaskState {
 /// TEAM_070: Default stack size for kernel tasks (64KB).
 #[allow(dead_code)]
 pub const DEFAULT_STACK_SIZE: usize = 65536;
+
+/// TEAM_472: Default time quantum in timer ticks.
+/// At 100Hz timer rate, 10 ticks = 100ms per task before preemption.
+pub const QUANTUM_TICKS: u32 = 10;
 
 /// TEAM_070: Task Control Block (TCB).
 /// Stores all information about a task.
@@ -320,6 +399,10 @@ pub struct TaskControlBlock {
     pub sid: AtomicUsize,
     /// TEAM_406: File creation mask for umask syscall
     pub umask: AtomicU32,
+    /// TEAM_472: Remaining time ticks before preemption
+    pub ticks_remaining: AtomicU32,
+    /// TEAM_472: Total CPU ticks consumed by this task (for accounting)
+    pub total_ticks: AtomicU64,
 }
 
 /// TEAM_220: Global tracking of the foreground process for shell control.
@@ -401,6 +484,9 @@ impl Default for TaskControlBlock {
             sid: AtomicUsize::new(0),
             // TEAM_406: Default umask is 0o022 (standard Unix default)
             umask: AtomicU32::new(0o022),
+            // TEAM_472: Initialize with full quantum for preemptive scheduling
+            ticks_remaining: AtomicU32::new(QUANTUM_TICKS),
+            total_ticks: AtomicU64::new(0),
         }
     }
 }
@@ -454,6 +540,9 @@ impl From<UserTask> for TaskControlBlock {
             sid: AtomicUsize::new(user.pid.0 as usize),
             // TEAM_406: Default umask for new processes
             umask: AtomicU32::new(0o022),
+            // TEAM_472: Initialize with full quantum for preemptive scheduling
+            ticks_remaining: AtomicU32::new(QUANTUM_TICKS),
+            total_ticks: AtomicU64::new(0),
         }
     }
 }

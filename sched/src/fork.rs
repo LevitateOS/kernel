@@ -219,6 +219,9 @@ pub fn create_fork(tf: &SyscallFrame) -> Result<Arc<TaskControlBlock>, ForkError
         sid: AtomicUsize::new(parent_sid),
         // Umask inherited from parent
         umask: AtomicU32::new(parent_umask),
+        // TEAM_472: Initialize with full quantum for preemptive scheduling
+        ticks_remaining: AtomicU32::new(crate::QUANTUM_TICKS),
+        total_ticks: AtomicU64::new(0),
     };
 
     log::trace!(

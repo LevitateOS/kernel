@@ -1,6 +1,8 @@
 //! TEAM_299: x86_64 Processor Control Region (PCR) and CPU state management.
+//! TEAM_472: Added preemption tracking fields
 
 use core::arch::asm;
+use core::sync::atomic::{AtomicBool, AtomicU32};
 
 /// TEAM_299: MSR addresses
 const IA32_GS_BASE: u32 = 0xC000_0101;
@@ -27,8 +29,10 @@ pub struct ProcessorControlRegion {
     pub gdt: Gdt,
     /// Per-CPU TSS (offset 96)
     pub tss: TaskStateSegment,
-    /// Padding to ensure 16-byte alignment of the entire struct (offset 200)
-    pub _padding: [u64; 1],
+    /// TEAM_472: Flag indicating preemption is needed on return to userspace
+    pub needs_reschedule: AtomicBool,
+    /// TEAM_472: Preemption disable depth counter
+    pub preempt_count: AtomicU32,
 }
 
 pub const PCR_SELF_OFFSET: usize = 0;
@@ -48,7 +52,8 @@ impl ProcessorControlRegion {
             current_task_ptr: 0,
             gdt: Gdt::new(),
             tss: TaskStateSegment::new(),
-            _padding: [0; 1],
+            needs_reschedule: AtomicBool::new(false),
+            preempt_count: AtomicU32::new(0),
         }
     }
 }

@@ -2,7 +2,29 @@
 // Reference: https://wiki.osdev.org/APIC
 
 use crate::traits::{InterruptController, InterruptHandler, IrqId};
+use core::sync::atomic::{AtomicPtr, Ordering};
 use los_utils::Mutex;
+
+/// TEAM_472: Hook for preemption check after IRQ handling.
+/// Set by the kernel to check if task preemption is needed.
+/// Signature: fn(from_userspace: bool)
+static PREEMPT_CHECK_HOOK: AtomicPtr<()> = AtomicPtr::new(core::ptr::null_mut());
+
+/// TEAM_472: Register the preemption check hook.
+pub fn set_preempt_check_hook(hook: fn(bool)) {
+    PREEMPT_CHECK_HOOK.store(hook as *mut (), Ordering::Release);
+}
+
+/// TEAM_472: Call the preemption check hook if set.
+pub fn call_preempt_check(from_userspace: bool) {
+    let hook_ptr = PREEMPT_CHECK_HOOK.load(Ordering::Acquire);
+    if !hook_ptr.is_null() {
+        unsafe {
+            let hook: fn(bool) = core::mem::transmute(hook_ptr);
+            hook(from_userspace);
+        }
+    }
+}
 
 const MAX_HANDLERS: usize = 256;
 static HANDLERS: Mutex<[Option<&'static dyn InterruptHandler>; MAX_HANDLERS]> =
@@ -21,6 +43,15 @@ pub fn dispatch(vector: u8) -> bool {
     } else {
         false
     }
+}
+
+/// TEAM_472: Dispatch IRQ with preemption check.
+/// Called from irq_handler macro with from_userspace flag.
+pub fn dispatch_with_preempt(vector: u8, from_userspace: bool) -> bool {
+    let result = dispatch(vector);
+    // TEAM_472: Check for preemption after IRQ handling
+    call_preempt_check(from_userspace);
+    result
 }
 
 const APIC_REGISTER_ID: u32 = 0x20;

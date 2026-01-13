@@ -156,6 +156,9 @@ pub fn create_thread(
         sid: AtomicUsize::new(current_task().sid.load(Ordering::Acquire)),
         // TEAM_406: Threads inherit parent's umask
         umask: AtomicU32::new(current_task().umask.load(Ordering::Acquire)),
+        // TEAM_472: Initialize with full quantum for preemptive scheduling
+        ticks_remaining: AtomicU32::new(crate::QUANTUM_TICKS),
+        total_ticks: AtomicU64::new(0),
     };
 
     Ok(Arc::new(tcb))

@@ -52,9 +52,11 @@ pub extern "C" fn handle_sync_exception(esr: u64, elr: u64) {
 }
 
 // TEAM_422: Additional extern functions for IRQ and signal handling
+// TEAM_472: Added check_preemption_hook for preemptive scheduling
 unsafe extern "Rust" {
     fn handle_irq_dispatch(irq: u32) -> bool;
     fn check_and_deliver_signals(frame: &mut super::SyscallFrame);
+    fn check_preemption_hook(frame: &mut super::SyscallFrame);
 }
 
 /// Handle IRQs.
@@ -75,10 +77,12 @@ pub extern "C" fn handle_irq(frame: *mut super::SyscallFrame) {
 
     gic_api.end_interrupt(irq);
 
-    // TEAM_216: If IRQ came from userspace, check for signals
+    // TEAM_216: If IRQ came from userspace, check for signals and preemption
     if !frame.is_null() {
         let frame = unsafe { &mut *frame };
         check_signals(frame);
+        // TEAM_472: Check if preemption is needed after handling IRQ
+        check_preemption(frame);
     }
 }
 
@@ -86,6 +90,13 @@ pub extern "C" fn handle_irq(frame: *mut super::SyscallFrame) {
 /// TEAM_422: Delegates to kernel-provided signal handler.
 pub fn check_signals(frame: &mut super::SyscallFrame) {
     unsafe { check_and_deliver_signals(frame) };
+}
+
+/// TEAM_472: Check if preemption is needed before returning to userspace.
+/// Called after IRQ handling when returning to user mode.
+/// Delegates to kernel-provided check_preemption_hook.
+pub fn check_preemption(frame: &mut super::SyscallFrame) {
+    unsafe { check_preemption_hook(frame) };
 }
 
 pub fn init() {
