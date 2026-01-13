@@ -3,11 +3,14 @@
 //! TEAM_419: Use linux-raw-sys for mmap constants.
 //! TEAM_420: Direct linux_raw_sys imports, no shims
 //! TEAM_421: Return SyscallResult, no scattered casts
+//! TEAM_471: Added file-backed mmap support for dynamic linking.
 
 use crate::SyscallResult;
 use core::sync::atomic::Ordering;
-use linux_raw_sys::errno::{EINVAL, ENOMEM, ENOSYS};
+use linux_raw_sys::errno::{EBADF, EINVAL, EIO, ENOMEM, ENOSYS};
 use linux_raw_sys::general::{MAP_ANONYMOUS, MAP_FIXED, PROT_EXEC, PROT_READ, PROT_WRITE};
+// TEAM_471: MAP_PRIVATE for file-backed mappings
+const MAP_PRIVATE: u32 = 0x2;
 // TEAM_462: Import page alignment helpers from central constants module
 use los_hal::mmu::{
     self, PAGE_SIZE, PageAllocator, PageFlags, PageTable, is_page_aligned, page_align_up,
@@ -190,16 +193,26 @@ pub fn sys_mmap(
         return Err(EINVAL);
     }
 
-    // For MVP, only support MAP_ANONYMOUS | MAP_PRIVATE
-    if flags & MAP_ANONYMOUS == 0 {
-        log::warn!(
-            "[MMAP] Only MAP_ANONYMOUS supported, got flags=0x{:x}",
-            flags
-        );
-        return Err(EINVAL);
+    // TEAM_471: Check if this is a file-backed mapping
+    let is_anonymous = flags & MAP_ANONYMOUS != 0;
+
+    if !is_anonymous {
+        // TEAM_471: File-backed mapping - dispatch to dedicated handler
+        if fd < 0 {
+            log::warn!("[MMAP] File-backed mapping requires valid fd, got {}", fd);
+            return Err(EBADF);
+        }
+        // Offset must be page-aligned for file-backed mappings
+        if !is_page_aligned(offset) {
+            log::warn!("[MMAP] File offset 0x{:x} not page-aligned", offset);
+            return Err(EINVAL);
+        }
+        return sys_mmap_file(addr, len, prot, flags, fd, offset);
     }
+
+    // Anonymous mapping: validate fd and offset are unused
     if fd != -1 || offset != 0 {
-        log::warn!("[MMAP] File-backed mappings not supported");
+        log::warn!("[MMAP] Anonymous mapping should have fd=-1 and offset=0");
         return Err(EINVAL);
     }
 
@@ -344,6 +357,176 @@ pub fn sys_munmap(addr: usize, len: usize) -> SyscallResult {
 
     log::trace!("[MUNMAP] Unmapped 0x{:x}-0x{:x}", addr, end);
     Ok(0)
+}
+
+// ============================================================================
+// TEAM_471: File-Backed mmap Support
+// ============================================================================
+
+/// TEAM_471: Handle file-backed mmap (MAP_PRIVATE with fd).
+///
+/// This implements a simplified "eager copy" approach: the file contents
+/// are read and copied to newly allocated pages at mmap time. This is
+/// correct for MAP_PRIVATE semantics (private copy, not shared).
+///
+/// True copy-on-write optimization is deferred for future implementation.
+///
+/// # Arguments
+/// * `addr` - Hint address (ignored unless MAP_FIXED)
+/// * `len` - Length of mapping
+/// * `prot` - Protection flags (PROT_READ, PROT_WRITE, PROT_EXEC)
+/// * `flags` - Must include MAP_PRIVATE for file mappings
+/// * `fd` - File descriptor to map (must be valid and readable)
+/// * `offset` - File offset (must be page-aligned)
+///
+/// # Returns
+/// Ok(virtual_address) on success, Err(errno) on failure.
+fn sys_mmap_file(
+    addr: usize,
+    len: usize,
+    prot: u32,
+    flags: u32,
+    fd: i32,
+    offset: usize,
+) -> SyscallResult {
+    log::trace!(
+        "[MMAP] File-backed: fd={} len=0x{:x} offset=0x{:x} prot=0x{:x} flags=0x{:x}",
+        fd,
+        len,
+        offset,
+        prot,
+        flags
+    );
+
+    // Only MAP_PRIVATE supported for file mappings (not MAP_SHARED)
+    if flags & MAP_PRIVATE == 0 {
+        log::warn!("[MMAP] Only MAP_PRIVATE supported for file mappings, got flags=0x{:x}", flags);
+        return Err(EINVAL);
+    }
+
+    let task = los_sched::current_task();
+    let ttbr0 = task.ttbr0.load(Ordering::Acquire);
+
+    // 1. Get the file from fd table and read its contents
+    let file_data = {
+        let fd_table = task.fd_table.lock();
+        let entry = fd_table.get(fd as usize).ok_or(EBADF)?;
+
+        // Must be a VFS file
+        let file = match &entry.fd_type {
+            los_sched::fd_table::FdType::VfsFile(f) => f.clone(),
+            _ => {
+                log::warn!("[MMAP] fd {} is not a regular file", fd);
+                return Err(EBADF);
+            }
+        };
+        drop(fd_table); // Release lock early
+
+        // Check that file is readable
+        if !file.flags.is_readable() {
+            log::warn!("[MMAP] fd {} is not readable", fd);
+            return Err(EBADF);
+        }
+
+        // Read file data at offset
+        let aligned_len = page_align_up(len);
+        let mut buf = alloc::vec![0u8; aligned_len];
+
+        // Read from the inode at the specified offset
+        let bytes_read = match file.inode.read(offset as u64, &mut buf[..len]) {
+            Ok(n) => n,
+            Err(e) => {
+                log::warn!("[MMAP] Failed to read file: {:?}", e);
+                return Err(EIO);
+            }
+        };
+
+        log::trace!(
+            "[MMAP] Read {} bytes from file (requested {})",
+            bytes_read,
+            len
+        );
+
+        // Zero-fill is automatic since buf was initialized to 0
+        buf
+    };
+
+    // 2. Find free region in user address space
+    let pages_needed = file_data.len() / PAGE_SIZE;
+    let base_addr = if addr != 0 && flags & MAP_FIXED != 0 {
+        // MAP_FIXED: use exact address (must be page-aligned)
+        if !is_page_aligned(addr) {
+            return Err(EINVAL);
+        }
+        addr
+    } else {
+        // Find a free region
+        find_free_mmap_region(ttbr0, file_data.len()).ok_or_else(|| {
+            log::warn!("[MMAP] No free region for {} bytes", file_data.len());
+            ENOMEM
+        })?
+    };
+
+    log::trace!(
+        "[MMAP] Mapping {} pages at 0x{:x}",
+        pages_needed,
+        base_addr
+    );
+
+    // 3. Create RAII guard for cleanup on failure
+    let mut guard = MmapGuard::new(ttbr0);
+    let page_flags = prot_to_page_flags(prot);
+
+    // 4. Allocate pages and copy file data
+    for i in 0..pages_needed {
+        let va = base_addr + i * PAGE_SIZE;
+        let data_offset = i * PAGE_SIZE;
+
+        // Allocate physical page
+        let phys = match FRAME_ALLOCATOR.alloc_page() {
+            Some(p) => p,
+            None => {
+                log::warn!("[MMAP] Failed to allocate page {}/{}", i + 1, pages_needed);
+                return Err(ENOMEM);
+            }
+        };
+
+        // Copy file data to page
+        let page_ptr = phys_to_virt(phys) as *mut u8;
+        // SAFETY: page_ptr is valid kernel memory, file_data slice is within bounds
+        unsafe {
+            let src = file_data[data_offset..data_offset + PAGE_SIZE].as_ptr();
+            core::ptr::copy_nonoverlapping(src, page_ptr, PAGE_SIZE);
+        }
+
+        // Map into user address space
+        if unsafe { mm_user::map_user_page(ttbr0, va, phys, page_flags) }.is_err() {
+            FRAME_ALLOCATOR.free_page(phys);
+            log::warn!("[MMAP] Failed to map page at 0x{:x}", va);
+            return Err(ENOMEM);
+        }
+
+        guard.track(va, phys);
+    }
+
+    // 5. Success - commit the guard (pages won't be freed)
+    guard.commit();
+
+    // 6. Record VMA
+    {
+        use los_mm::vma::Vma;
+        let vma = Vma::new(base_addr, base_addr + file_data.len(), prot_to_vma_flags(prot));
+        let mut vmas = task.vmas.lock();
+        let _ = vmas.insert(vma); // Ignore error if overlapping
+    }
+
+    log::trace!(
+        "[MMAP] File-backed: mapped {} pages at 0x{:x}",
+        pages_needed,
+        base_addr
+    );
+
+    Ok(base_addr as i64)
 }
 
 /// TEAM_239: sys_mprotect - Change protection on memory region.
