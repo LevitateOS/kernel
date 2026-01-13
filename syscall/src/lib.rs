@@ -673,6 +673,41 @@ pub fn syscall_dispatch(frame: &mut SyscallFrame) {
             frame.arg1() as usize,
             frame.arg2() as usize,
         ),
+        // TEAM_473: Low-hanging fruit syscalls
+        #[cfg(target_arch = "x86_64")]
+        Some(SyscallNumber::Pipe) => fs::sys_pipe(frame.arg0() as usize),
+        #[cfg(target_arch = "x86_64")]
+        Some(SyscallNumber::Readlink) => fs::sys_readlinkat(
+            linux_raw_sys::general::AT_FDCWD,
+            frame.arg0() as usize,
+            frame.arg1() as usize,
+            frame.arg2() as usize,
+        ),
+        #[cfg(target_arch = "x86_64")]
+        Some(SyscallNumber::Creat) => fs::sys_openat(
+            linux_raw_sys::general::AT_FDCWD,
+            frame.arg0() as usize,
+            // O_CREAT | O_WRONLY | O_TRUNC
+            linux_raw_sys::general::O_CREAT | linux_raw_sys::general::O_WRONLY | linux_raw_sys::general::O_TRUNC,
+            frame.arg1() as u32,
+        ),
+        Some(SyscallNumber::Sync) => fs::sys_sync(),
+        Some(SyscallNumber::Fsync) => fs::sys_fsync(frame.arg0() as usize),
+        Some(SyscallNumber::Fdatasync) => fs::sys_fdatasync(frame.arg0() as usize),
+        Some(SyscallNumber::Msync) => fs::sys_msync(
+            frame.arg0() as usize,
+            frame.arg1() as usize,
+            frame.arg2() as i32,
+        ),
+        Some(SyscallNumber::Fadvise64) => fs::sys_fadvise64(
+            frame.arg0() as usize,
+            frame.arg1() as i64,
+            frame.arg2() as i64,
+            frame.arg3() as i32,
+        ),
+        Some(SyscallNumber::Sysinfo) => sys::sys_sysinfo(frame.arg0() as usize),
+        Some(SyscallNumber::Statfs) => sys::sys_statfs(frame.arg0() as usize, frame.arg1() as usize),
+        Some(SyscallNumber::Fstatfs) => sys::sys_fstatfs(frame.arg0() as usize, frame.arg1() as usize),
         None => {
             log::warn!("[SYSCALL] Unknown syscall number: {}", nr);
             Err(linux_raw_sys::errno::ENOSYS)

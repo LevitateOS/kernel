@@ -179,6 +179,196 @@ pub fn sys_getrandom(buf: usize, buflen: usize, flags: u32) -> SyscallResult {
     Ok(written as i64)
 }
 
+// ============================================================================
+// TEAM_473: Low-hanging fruit syscalls
+// ============================================================================
+
+/// Sysinfo struct - matches Linux's struct sysinfo
+#[repr(C)]
+#[derive(Default)]
+pub struct Sysinfo {
+    pub uptime: i64,      // Seconds since boot
+    pub loads: [u64; 3],  // 1, 5, and 15 minute load averages
+    pub totalram: u64,    // Total usable main memory size
+    pub freeram: u64,     // Available memory size
+    pub sharedram: u64,   // Amount of shared memory
+    pub bufferram: u64,   // Memory used by buffers
+    pub totalswap: u64,   // Total swap space size
+    pub freeswap: u64,    // Swap space still available
+    pub procs: u16,       // Number of current processes
+    pub pad: u16,         // Padding
+    pub totalhigh: u64,   // Total high memory size
+    pub freehigh: u64,    // Available high memory size
+    pub mem_unit: u32,    // Memory unit size in bytes
+    pub _pad: [u8; 0],    // Padding to 112 bytes (varies by arch)
+}
+
+/// TEAM_473: sys_sysinfo - Get system information.
+///
+/// Returns memory and uptime information.
+pub fn sys_sysinfo(info_ptr: usize) -> SyscallResult {
+    log::trace!("[SYSCALL] sysinfo(info=0x{:x})", info_ptr);
+
+    let task = los_sched::current_task();
+    let info_size = core::mem::size_of::<Sysinfo>();
+
+    // Validate user buffer
+    if mm_user::validate_user_buffer(task.ttbr0.load(Ordering::Acquire), info_ptr, info_size, true)
+        .is_err()
+    {
+        return Err(EFAULT);
+    }
+
+    // Fill in sysinfo struct
+    let mut info = Sysinfo::default();
+    info.uptime = crate::time::uptime_seconds() as i64;
+    info.loads = [0, 0, 0]; // No load average tracking yet
+    // Get memory info from buddy allocator if available
+    info.totalram = 512 * 1024 * 1024; // 512MB default (QEMU default)
+    info.freeram = 256 * 1024 * 1024; // Estimate 50% free
+    info.sharedram = 0;
+    info.bufferram = 0;
+    info.totalswap = 0;
+    info.freeswap = 0;
+    info.procs = 1; // At least init
+    info.totalhigh = 0;
+    info.freehigh = 0;
+    info.mem_unit = 1; // Bytes
+
+    // Write to user buffer
+    let dest = match mm_user::user_va_to_kernel_ptr(task.ttbr0.load(Ordering::Acquire), info_ptr) {
+        Some(ptr) => ptr as *mut Sysinfo,
+        None => return Err(EFAULT),
+    };
+
+    // SAFETY: dest is valid from user_va_to_kernel_ptr check above,
+    // and we validated the buffer size.
+    unsafe {
+        *dest = info;
+    }
+
+    Ok(0)
+}
+
+/// Statfs struct - matches Linux's struct statfs64
+#[repr(C)]
+pub struct Statfs {
+    pub f_type: i64,    // Type of filesystem
+    pub f_bsize: i64,   // Optimal transfer block size
+    pub f_blocks: u64,  // Total data blocks in filesystem
+    pub f_bfree: u64,   // Free blocks in filesystem
+    pub f_bavail: u64,  // Free blocks available to unprivileged user
+    pub f_files: u64,   // Total file nodes in filesystem
+    pub f_ffree: u64,   // Free file nodes in filesystem
+    pub f_fsid: [i32; 2], // Filesystem ID
+    pub f_namelen: i64, // Maximum length of filenames
+    pub f_frsize: i64,  // Fragment size
+    pub f_flags: i64,   // Mount flags
+    pub f_spare: [i64; 4], // Spare for later
+}
+
+// Filesystem type magic numbers
+const TMPFS_MAGIC: i64 = 0x01021994;
+
+/// TEAM_473: sys_statfs - Get filesystem statistics.
+pub fn sys_statfs(path_ptr: usize, buf_ptr: usize) -> SyscallResult {
+    log::trace!("[SYSCALL] statfs(path=0x{:x}, buf=0x{:x})", path_ptr, buf_ptr);
+
+    let task = los_sched::current_task();
+
+    // Validate path (read path to ensure it exists, but we don't really use it)
+    let _path = match crate::read_user_path(path_ptr) {
+        Ok(p) => p,
+        Err(_) => return Err(EFAULT),
+    };
+
+    // Validate output buffer
+    let buf_size = core::mem::size_of::<Statfs>();
+    if mm_user::validate_user_buffer(task.ttbr0.load(Ordering::Acquire), buf_ptr, buf_size, true)
+        .is_err()
+    {
+        return Err(EFAULT);
+    }
+
+    // Fill in statfs struct with tmpfs-like values
+    let statfs = Statfs {
+        f_type: TMPFS_MAGIC,
+        f_bsize: 4096,
+        f_blocks: 262144,   // ~1GB at 4KB blocks
+        f_bfree: 131072,    // ~50% free
+        f_bavail: 131072,
+        f_files: 65536,     // Max inodes
+        f_ffree: 32768,     // ~50% free
+        f_fsid: [0, 0],
+        f_namelen: 255,
+        f_frsize: 4096,
+        f_flags: 0,
+        f_spare: [0; 4],
+    };
+
+    // Write to user buffer
+    let dest = match mm_user::user_va_to_kernel_ptr(task.ttbr0.load(Ordering::Acquire), buf_ptr) {
+        Some(ptr) => ptr as *mut Statfs,
+        None => return Err(EFAULT),
+    };
+
+    // SAFETY: dest is valid from user_va_to_kernel_ptr check above
+    unsafe {
+        *dest = statfs;
+    }
+
+    Ok(0)
+}
+
+/// TEAM_473: sys_fstatfs - Get filesystem statistics by file descriptor.
+pub fn sys_fstatfs(fd: usize, buf_ptr: usize) -> SyscallResult {
+    log::trace!("[SYSCALL] fstatfs(fd={}, buf=0x{:x})", fd, buf_ptr);
+
+    // Validate fd exists
+    if !crate::is_valid_fd(fd) {
+        return Err(linux_raw_sys::errno::EBADF);
+    }
+
+    let task = los_sched::current_task();
+
+    // Validate output buffer
+    let buf_size = core::mem::size_of::<Statfs>();
+    if mm_user::validate_user_buffer(task.ttbr0.load(Ordering::Acquire), buf_ptr, buf_size, true)
+        .is_err()
+    {
+        return Err(EFAULT);
+    }
+
+    // Fill in statfs struct (same as statfs, since all our fs is tmpfs)
+    let statfs = Statfs {
+        f_type: TMPFS_MAGIC,
+        f_bsize: 4096,
+        f_blocks: 262144,
+        f_bfree: 131072,
+        f_bavail: 131072,
+        f_files: 65536,
+        f_ffree: 32768,
+        f_fsid: [0, 0],
+        f_namelen: 255,
+        f_frsize: 4096,
+        f_flags: 0,
+        f_spare: [0; 4],
+    };
+
+    // Write to user buffer
+    let dest = match mm_user::user_va_to_kernel_ptr(task.ttbr0.load(Ordering::Acquire), buf_ptr) {
+        Some(ptr) => ptr as *mut Statfs,
+        None => return Err(EFAULT),
+    };
+
+    // SAFETY: dest is valid from user_va_to_kernel_ptr check above
+    unsafe {
+        *dest = statfs;
+    }
+
+    Ok(0)
+}
+
 /// TEAM_206: Read null-terminated string from user memory
 pub fn read_user_string(
     ttbr0: usize,

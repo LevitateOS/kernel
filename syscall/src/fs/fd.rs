@@ -828,3 +828,66 @@ pub fn sys_fchownat(
 ) -> SyscallResult {
     validate_user_pathname(pathname)
 }
+
+// ============================================================================
+// TEAM_473: Low-hanging fruit syscalls - sync operations and pipe
+// ============================================================================
+
+/// TEAM_473: sys_pipe - Create a pipe (legacy wrapper for pipe2).
+///
+/// Equivalent to pipe2(pipefd, 0).
+pub fn sys_pipe(pipefd_ptr: usize) -> SyscallResult {
+    sys_pipe2(pipefd_ptr, 0)
+}
+
+/// TEAM_473: sys_sync - Sync all filesystems.
+///
+/// No-op for tmpfs since everything is already in memory.
+pub fn sys_sync() -> SyscallResult {
+    log::trace!("[SYSCALL] sync() -> 0 (no-op for tmpfs)");
+    Ok(0)
+}
+
+/// TEAM_473: sys_fsync - Sync file to disk.
+///
+/// No-op for tmpfs since everything is already in memory.
+pub fn sys_fsync(fd: usize) -> SyscallResult {
+    log::trace!("[SYSCALL] fsync(fd={}) -> 0 (no-op for tmpfs)", fd);
+    // Validate fd exists
+    if !is_valid_fd(fd) {
+        return Err(EBADF);
+    }
+    Ok(0)
+}
+
+/// TEAM_473: sys_fdatasync - Sync file data to disk.
+///
+/// No-op for tmpfs since everything is already in memory.
+pub fn sys_fdatasync(fd: usize) -> SyscallResult {
+    log::trace!("[SYSCALL] fdatasync(fd={}) -> 0 (no-op for tmpfs)", fd);
+    // Validate fd exists
+    if !is_valid_fd(fd) {
+        return Err(EBADF);
+    }
+    Ok(0)
+}
+
+/// TEAM_473: sys_msync - Sync memory-mapped region to disk.
+///
+/// No-op for tmpfs since everything is already in memory.
+pub fn sys_msync(_addr: usize, _length: usize, _flags: i32) -> SyscallResult {
+    log::trace!("[SYSCALL] msync() -> 0 (no-op for tmpfs)");
+    Ok(0)
+}
+
+/// TEAM_473: sys_fadvise64 - Provide file access hints to kernel.
+///
+/// Advisory only - kernel is free to ignore. We always return success.
+pub fn sys_fadvise64(fd: usize, _offset: i64, _len: i64, _advice: i32) -> SyscallResult {
+    log::trace!("[SYSCALL] fadvise64(fd={}) -> 0 (advisory ignored)", fd);
+    // Validate fd exists
+    if !is_valid_fd(fd) {
+        return Err(EBADF);
+    }
+    Ok(0)
+}

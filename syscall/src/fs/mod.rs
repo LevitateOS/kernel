@@ -17,6 +17,8 @@ pub use fd::{
 };
 pub use fd::{sys_chmod, sys_chown, sys_fchmod, sys_fchmodat, sys_fchown, sys_fchownat};
 pub use fd::{sys_dup, sys_dup2, sys_dup3, sys_fcntl, sys_ioctl, sys_isatty, sys_pipe2};
+// TEAM_473: Low-hanging fruit syscalls
+pub use fd::{sys_fadvise64, sys_fdatasync, sys_fsync, sys_msync, sys_pipe, sys_sync};
 pub use link::{sys_linkat, sys_readlinkat, sys_symlinkat, sys_utimensat};
 pub use mount::{sys_mount, sys_umount};
 pub use open::{sys_close, sys_faccessat, sys_openat};

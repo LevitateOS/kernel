@@ -134,6 +134,15 @@ pub enum SyscallNumber {
     Sendfile = 71,    // Copy data between file descriptors
     Socket = 198,     // Socket creation (stub - no network stack yet)
     Socketpair = 199, // Create pair of connected sockets
+    // TEAM_473: Low-hanging fruit syscalls
+    Sync = 81,       // Sync all filesystems (no-op for tmpfs)
+    Fsync = 82,      // Sync file to disk (no-op for tmpfs)
+    Fdatasync = 83,  // Sync file data (no-op for tmpfs)
+    Sysinfo = 179,   // System information (memory, uptime)
+    Statfs = 43,     // Get filesystem statistics
+    Fstatfs = 44,    // Get filesystem statistics by fd
+    Fadvise64 = 223, // File access hints (advisory, returns success)
+    Msync = 227,     // Sync memory-mapped file (no-op for tmpfs)
 
     // === Custom LevitateOS syscalls (temporary, until clone/execve work) ===
     /// TEAM: Spawn process (custom, will be replaced by clone+execve)
@@ -268,6 +277,15 @@ impl SyscallNumber {
             71 => Some(Self::Sendfile),
             198 => Some(Self::Socket),
             199 => Some(Self::Socketpair),
+            // TEAM_473: Low-hanging fruit syscalls
+            43 => Some(Self::Statfs),
+            44 => Some(Self::Fstatfs),
+            81 => Some(Self::Sync),
+            82 => Some(Self::Fsync),
+            83 => Some(Self::Fdatasync),
+            179 => Some(Self::Sysinfo),
+            223 => Some(Self::Fadvise64),
+            227 => Some(Self::Msync),
             // Custom LevitateOS
             1000 => Some(Self::Spawn),
             1001 => Some(Self::SpawnArgs),

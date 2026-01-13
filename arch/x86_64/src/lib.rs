@@ -165,6 +165,18 @@ pub enum SyscallNumber {
     Sendto = 44,          // Send to socket (stub - no network stack yet)
     RtSigtimedwait = 128, // Wait for signal with timeout
     Getdents64 = 217,     // TEAM_459: 64-bit directory entries (BusyBox ls)
+    // TEAM_473: Low-hanging fruit syscalls
+    Pipe = 22,       // Legacy pipe() - maps to pipe2(fds, 0)
+    Msync = 26,      // Sync memory-mapped file (no-op for tmpfs)
+    Fsync = 74,      // Sync file to disk (no-op for tmpfs)
+    Fdatasync = 75,  // Sync file data (no-op for tmpfs)
+    Creat = 85,      // Legacy creat() - maps to openat with O_CREAT|O_WRONLY|O_TRUNC
+    Readlink = 89,   // Legacy readlink() - maps to readlinkat(AT_FDCWD, ...)
+    Sysinfo = 99,    // System information (memory, uptime)
+    Statfs = 137,    // Get filesystem statistics
+    Fstatfs = 138,   // Get filesystem statistics by fd
+    Sync = 162,      // Sync all filesystems (no-op for tmpfs)
+    Fadvise64 = 221, // File access hints (advisory, returns success)
 
     // === Custom LevitateOS syscalls ===
     Spawn = 1000,
@@ -246,7 +258,7 @@ impl SyscallNumber {
             267 => Some(Self::Readlinkat),
             280 => Some(Self::Utimensat),
             292 => Some(Self::Dup3),
-            22 => Some(Self::Pipe2), // TEAM_404: Old pipe() syscall → Pipe2
+            // TEAM_473: Syscall 22 is pipe(), not pipe2. Pipe2 is 293.
             293 => Some(Self::Pipe2),
             // TEAM_350: Eyra prerequisites
             186 => Some(Self::Gettid),
@@ -306,6 +318,18 @@ impl SyscallNumber {
             44 => Some(Self::Sendto),
             128 => Some(Self::RtSigtimedwait),
             217 => Some(Self::Getdents64), // TEAM_459
+            // TEAM_473: Low-hanging fruit syscalls
+            22 => Some(Self::Pipe),
+            26 => Some(Self::Msync),
+            74 => Some(Self::Fsync),
+            75 => Some(Self::Fdatasync),
+            85 => Some(Self::Creat),
+            89 => Some(Self::Readlink),
+            99 => Some(Self::Sysinfo),
+            137 => Some(Self::Statfs),
+            138 => Some(Self::Fstatfs),
+            162 => Some(Self::Sync),
+            221 => Some(Self::Fadvise64),
             // Custom LevitateOS
             1000 => Some(Self::Spawn),
             1001 => Some(Self::SpawnArgs),
